@@ -16,6 +16,12 @@ the original feature bullet instead of adding separate entries for them.
 
 ## [unreleased]
 
+## [0.0.2]
+
+- Give the composer native line ends: Down on the last line moves to the end of the text, Up on the first line moves to the start, and Page Up and Page Down scroll an overflowing field
+- Recall earlier sent messages with Up at the start of the composer, and walk back toward the current draft with Down
+- Move project history actions onto their own label row, and inset the macOS traffic lights evenly from the window edges
+
 ## [0.0.1]
 
 - First Launcher release. This is a modified version of Waku. Projects and settings live in Launcher's own directories, separate from a Waku install.
