@@ -72,7 +72,7 @@ describe('composer preferences', () => {
 
   test('carries preferences saved for the OpenCode 2 beta over to OpenCode', () => {
     const storage = memoryStorage()
-    storage.setItem('waku.composer-preferences.v1', JSON.stringify({
+    storage.setItem('launcher.composer-preferences.v1', JSON.stringify({
       'ws://first': {
         lastProvider: 'openCode2',
         lastModel: 'opencode-go/deepseek-v4-flash',

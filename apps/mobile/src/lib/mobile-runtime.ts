@@ -7,7 +7,7 @@ import type {
   ProviderSessionSummary,
   RuntimeMode,
   SequencedEvent,
-} from '@waku/client';
+} from '@launcher/client';
 
 export interface MobileRuntimeClock {
   nowSeconds: () => number;

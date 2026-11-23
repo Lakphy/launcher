@@ -1,37 +1,40 @@
 #!/usr/bin/env sh
 set -eu
 
-# Installs Waku for Linux into ~/.local — no root, no package manager.
-# Downloads the release tarball from https://releases.waku.sh, unpacks it as
-# ~/.local/waku.app, links the binary onto PATH, and registers the desktop
-# entry. docs/linux.md documents the equivalent manual steps.
+# Installs Launcher for Linux into ~/.local — no root, no package manager.
+# Unpacks a release tarball as ~/.local/launcher.app, links the binary onto
+# PATH, and registers the desktop entry. docs/linux.md documents the
+# equivalent manual steps.
 #
-#   curl -fsSL https://waku.sh/install.sh | sh
+#   LAUNCHER_BUNDLE_PATH=launcher-<version>-<target>.tar.gz sh install.sh
 #
 # Environment:
-#   WAKU_VERSION        install this version instead of the latest
-#   WAKU_BUNDLE_PATH    install a local tarball instead of downloading
-#   WAKU_RELEASES_URL   base URL to download from
+#   LAUNCHER_VERSION        install this version instead of the latest
+#   LAUNCHER_BUNDLE_PATH    install a local tarball instead of downloading
+#   LAUNCHER_RELEASES_URL   base URL to download from; required unless
+#                           LAUNCHER_BUNDLE_PATH is set. Do not point this at
+#                           the upstream Waku release host.
 
 usage() {
     cat <<'USAGE'
-Install Waku for Linux into ~/.local.
+Install Launcher for Linux into ~/.local.
 
 Usage:
-  curl -fsSL https://waku.sh/install.sh | sh
-  curl -fsSL https://waku.sh/install.sh | sh -s -- --uninstall
+  LAUNCHER_BUNDLE_PATH=<tarball> sh install.sh
+  LAUNCHER_RELEASES_URL=https://example.invalid sh install.sh
+  sh install.sh --uninstall
 
 Options:
-  --uninstall   Remove Waku, leaving ~/.waku (projects and settings) alone
+  --uninstall   Remove Launcher, leaving ~/.launcher (projects and settings) alone
   --help        Show this help
 USAGE
 }
 
 main() {
-    app_dir="$HOME/.local/waku.app"
-    bin_link="$HOME/.local/bin/waku"
-    desktop_file="$HOME/.local/share/applications/sh.waku.desktop"
-    releases="${WAKU_RELEASES_URL:-https://releases.waku.sh}"
+    app_dir="$HOME/.local/launcher.app"
+    bin_link="$HOME/.local/bin/launcher"
+    desktop_file="$HOME/.local/share/applications/dev.lakphy.launcher.desktop"
+    releases="${LAUNCHER_RELEASES_URL:-}"
 
     case "${1:-}" in
         --uninstall) uninstall; return ;;
@@ -46,8 +49,8 @@ main() {
 
     platform="$(uname -s)"
     if [ "$platform" = "Darwin" ]; then
-        echo "Waku for macOS ships as a signed .dmg that updates itself." >&2
-        echo "Download it from https://waku.sh" >&2
+        echo "Launcher for macOS is published as a .dmg." >&2
+        echo "Download it from https://github.com/Lakphy/launcher/releases" >&2
         exit 1
     fi
     if [ "$platform" != "Linux" ]; then
@@ -61,7 +64,7 @@ main() {
         aarch64 | arm64) target="aarch64-unknown-linux-gnu" ;;
         *)
             echo "Unsupported architecture: $machine" >&2
-            echo "Build from source: https://github.com/egoist/waku" >&2
+            echo "Build from source: https://github.com/Lakphy/launcher" >&2
             exit 1
             ;;
     esac
@@ -75,30 +78,41 @@ main() {
         exit 1
     fi
 
-    temp="$(mktemp -d "${TMPDIR:-/tmp}/waku-XXXXXX")"
+    temp="$(mktemp -d "${TMPDIR:-/tmp}/launcher-XXXXXX")"
     staging="$app_dir.new"
     trap 'rm -rf -- "$temp" "$staging"' EXIT INT TERM
 
-    archive="$temp/waku.tar.gz"
-    if [ -n "${WAKU_BUNDLE_PATH:-}" ]; then
-        cp "$WAKU_BUNDLE_PATH" "$archive"
+    archive="$temp/launcher.tar.gz"
+    if [ -n "${LAUNCHER_BUNDLE_PATH:-}" ]; then
+        cp "$LAUNCHER_BUNDLE_PATH" "$archive"
     else
-        version="${WAKU_VERSION:-}"
+        if [ -z "$releases" ]; then
+            echo "Set LAUNCHER_RELEASES_URL, or pass LAUNCHER_BUNDLE_PATH." >&2
+            echo "Releases are listed at https://github.com/Lakphy/launcher/releases" >&2
+            exit 1
+        fi
+        case "$releases" in
+            *waku.sh*)
+                echo "Refusing to download Launcher from the upstream Waku host." >&2
+                exit 1
+                ;;
+        esac
+        version="${LAUNCHER_VERSION:-}"
         if [ -z "$version" ]; then
             if ! version="$(fetch "$releases/latest-linux.txt")"; then
                 echo "Could not reach $releases/latest-linux.txt." >&2
-                echo "Pass WAKU_VERSION to install a specific version." >&2
+                echo "Pass LAUNCHER_VERSION to install a specific version." >&2
                 exit 1
             fi
             version="$(printf '%s' "$version" | tr -d '[:space:]')"
         fi
         if [ -z "$version" ]; then
-            echo "No Waku version published for Linux yet." >&2
+            echo "No Launcher version published for Linux yet." >&2
             exit 1
         fi
-        echo "Downloading Waku $version for $machine"
-        if ! fetch "$releases/waku-$version-$target.tar.gz" >"$archive"; then
-            echo "Download failed: $releases/waku-$version-$target.tar.gz" >&2
+        echo "Downloading Launcher $version for $machine"
+        if ! fetch "$releases/launcher-$version-$target.tar.gz" >"$archive"; then
+            echo "Download failed: $releases/launcher-$version-$target.tar.gz" >&2
             exit 1
         fi
     fi
@@ -116,18 +130,18 @@ main() {
     mkdir -p "$staging" "$(dirname "$bin_link")" "$(dirname "$desktop_file")"
     tar -xzf "$archive" --strip-components=1 -C "$staging"
 
-    # Waku resolves its daemon and self-update helper next to its own
+    # Launcher resolves its daemon and self-update helper next to its own
     # executable, so all three must stay together in bin/. Linking only the
     # main binary onto PATH is safe — current_exe() resolves the symlink back
-    # into waku.app.
-    for binary in waku waku-daemon waku-updater; do
+    # into launcher.app.
+    for binary in launcher launcher-daemon launcher-updater; do
         if [ ! -x "$staging/bin/$binary" ]; then
             echo "Archive is missing bin/$binary." >&2
             exit 1
         fi
     done
-    if [ "$(cat "$staging/share/waku/self-update-v1" 2>/dev/null || true)" != \
-        "waku-self-update-v1" ]; then
+    if [ "$(cat "$staging/share/launcher/self-update-v1" 2>/dev/null || true)" != \
+        "launcher-self-update-v1" ]; then
         echo "Archive is missing its managed-install marker." >&2
         exit 1
     fi
@@ -135,29 +149,29 @@ main() {
     # survive the upgrade.
     rm -rf "$app_dir"
     mv "$staging" "$app_dir"
-    ln -sf "$app_dir/bin/waku" "$bin_link"
+    ln -sf "$app_dir/bin/launcher" "$bin_link"
 
-    entry="$app_dir/share/applications/sh.waku.desktop"
+    entry="$app_dir/share/applications/dev.lakphy.launcher.desktop"
     if [ -f "$entry" ]; then
         # The packaged entry is relocatable (bare Exec/Icon names). Pin both to
         # this install so the launcher works without PATH or icon-theme setup.
-        sed -e "s|^Exec=waku$|Exec=$app_dir/bin/waku|" \
-            -e "s|^Icon=sh.waku$|Icon=$app_dir/share/icons/hicolor/256x256/apps/sh.waku.png|" \
+        sed -e "s|^Exec=launcher$|Exec=$app_dir/bin/launcher|" \
+            -e "s|^Icon=dev.lakphy.launcher$|Icon=$app_dir/share/icons/hicolor/256x256/apps/dev.lakphy.launcher.png|" \
             "$entry" >"$desktop_file"
         if command -v update-desktop-database >/dev/null 2>&1; then
             update-desktop-database "$(dirname "$desktop_file")" 2>/dev/null || true
         fi
     fi
 
-    # Waku is a desktop app and takes no arguments, so the launcher entry is
+    # Launcher is a desktop app and takes no arguments, so the launcher entry is
     # the way in. The PATH link is a convenience for starting it from a
     # terminal to watch its output.
-    echo "Waku is installed."
+    echo "Launcher is installed."
     if [ -f "$desktop_file" ]; then
         echo "Open it from your applications menu."
     fi
-    if [ "$(command -v waku || true)" = "$bin_link" ]; then
-        echo "From a terminal: waku"
+    if [ "$(command -v launcher || true)" = "$bin_link" ]; then
+        echo "From a terminal: launcher"
     else
         echo "From a terminal: $bin_link"
     fi
@@ -165,19 +179,19 @@ main() {
 
 uninstall() {
     if [ ! -d "$app_dir" ] && [ ! -L "$bin_link" ]; then
-        echo "Waku is not installed at $app_dir." >&2
+        echo "Launcher is not installed at $app_dir." >&2
         exit 1
     fi
     # Only reclaim the symlink and desktop entry this script created; a
     # distro package's copies of both belong to the package manager.
-    if [ "$(readlink "$bin_link" 2>/dev/null || true)" = "$app_dir/bin/waku" ]; then
+    if [ "$(readlink "$bin_link" 2>/dev/null || true)" = "$app_dir/bin/launcher" ]; then
         rm -f "$bin_link"
     fi
-    if [ -f "$desktop_file" ] && grep -qF "$app_dir/bin/waku" "$desktop_file"; then
+    if [ -f "$desktop_file" ] && grep -qF "$app_dir/bin/launcher" "$desktop_file"; then
         rm -f "$desktop_file"
     fi
     rm -rf "$app_dir"
-    echo "Waku is uninstalled. Projects and settings remain in ~/.waku."
+    echo "Launcher is uninstalled. Projects and settings remain in ~/.launcher."
 }
 
 main "$@"

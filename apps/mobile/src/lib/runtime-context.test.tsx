@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { AgentSession, Command, ResponsePayload, SequencedEvent, WakuClient } from '@waku/client';
-import { reduceRuntimeEvent } from '@waku/client/event-reducer';
+import type { AgentSession, Command, ResponsePayload, SequencedEvent, LauncherClient } from '@launcher/client';
+import { reduceRuntimeEvent } from '@launcher/client/event-reducer';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { daemonKeys, hydrateSession } from './daemon-api';
 import { beginTurn, createSession } from './mobile-runtime';
 
-let activeDaemon: { activeProfile: { id: string }; client: WakuClient; phase: 'connected' };
+let activeDaemon: { activeProfile: { id: string }; client: LauncherClient; phase: 'connected' };
 mock.module('./daemon-context', () => ({ useDaemon: () => activeDaemon }));
 mock.module('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
 mock.module('./composer-preferences-store', () => ({ persistentStorageSync: () => null }));
@@ -99,7 +99,7 @@ function fixture(options: { attached?: boolean } = {}) {
       listener = next;
       return () => { listener = undefined; };
     },
-  } as unknown as WakuClient;
+  } as unknown as LauncherClient;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const key = daemonKeys.session('profile', history.id);
   activeDaemon = { activeProfile: { id: 'profile' }, client, phase: 'connected' };

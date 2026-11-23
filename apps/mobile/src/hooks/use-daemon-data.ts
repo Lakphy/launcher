@@ -1,10 +1,10 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ProviderKind } from '@waku/client';
+import type { ProviderKind } from '@launcher/client';
 import {
   PROVIDER_PROBE_CACHE_STALE_TIME,
   readProviderProbeCache,
   writeProviderProbeCache,
-} from '@waku/client/provider-probe-cache';
+} from '@launcher/client/provider-probe-cache';
 
 import {
   daemonKeys,
@@ -179,6 +179,6 @@ export function useProviderCatalog() {
 }
 
 function requireClient(client: ReturnType<typeof useDaemon>['client']) {
-  if (!client) throw new Error('Waku daemon is disconnected');
+  if (!client) throw new Error('Launcher daemon is disconnected');
   return client;
 }

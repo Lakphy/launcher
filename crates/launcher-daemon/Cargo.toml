@@ -1,0 +1,34 @@
+[package]
+name = "launcher-daemon"
+version = "0.1.0"
+edition = "2024"
+description = "Headless Launcher provider daemon"
+license = "GPL-3.0-only"
+readme = "README.md"
+
+[features]
+dev-binary = []
+
+[[bin]]
+name = "launcher-daemon"
+path = "src/main.rs"
+
+[[bin]]
+name = "launcher-debug-daemon"
+path = "src/bin/launcher-debug-daemon.rs"
+required-features = ["dev-binary"]
+
+[dependencies]
+anyhow = "1.0"
+serde_json = "1.0"
+launcher-core = { path = "../launcher-core" }
+launcher-protocol = { path = "../launcher-protocol" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+] }

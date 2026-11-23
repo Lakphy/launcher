@@ -1,4 +1,4 @@
-export { fuzzyScore } from '@waku/client/fuzzy-search'
+export { fuzzyScore } from '@launcher/client/fuzzy-search'
 
 export function shouldKeepPreviousPaletteItems(
   nextCount: number,

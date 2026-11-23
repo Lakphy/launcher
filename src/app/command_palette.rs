@@ -13,7 +13,7 @@ use nucleo_matcher::{Matcher, Utf32Str};
 use super::*;
 
 actions!(
-    waku_command_palette,
+    launcher_command_palette,
     [
         SelectNext,
         SelectPrevious,
@@ -403,7 +403,7 @@ impl CommandPaletteUi {
     }
 }
 
-impl Waku {
+impl Launcher {
     pub(super) fn open_resume_picker_action(
         &mut self,
         _: &OpenResumePicker,
@@ -1344,29 +1344,34 @@ impl Waku {
         let fetch = self
             .store
             .provider_sessions(provider, PROVIDER_SESSION_CATALOG_LIMIT);
-        cx.spawn(async move |waku, cx| {
+        cx.spawn(async move |launcher, cx| {
             let result = cx.background_executor().spawn(async move { fetch() }).await;
-            let _ = waku.update(cx, |waku, cx| {
-                if !waku.command_palette.open
-                    || waku.command_palette.provider_session_generation != generation
-                    || waku.command_palette.resume_provider != provider
+            let _ = launcher.update(cx, |launcher, cx| {
+                if !launcher.command_palette.open
+                    || launcher.command_palette.provider_session_generation != generation
+                    || launcher.command_palette.resume_provider != provider
                 {
                     return;
                 }
-                waku.command_palette.provider_sessions_pending = false;
+                launcher.command_palette.provider_sessions_pending = false;
                 match result {
                     Ok(sessions) => {
-                        waku.command_palette.provider_sessions = sessions;
-                        waku.command_palette.provider_session_error = None;
+                        launcher.command_palette.provider_sessions = sessions;
+                        launcher.command_palette.provider_session_error = None;
                     }
                     Err(error) => {
-                        waku.command_palette.provider_sessions.clear();
-                        waku.command_palette.provider_session_error = Some(error.to_string());
+                        launcher.command_palette.provider_sessions.clear();
+                        launcher.command_palette.provider_session_error = Some(error.to_string());
                     }
                 }
-                if waku.command_palette.view == CommandPaletteView::Resume {
-                    let query = waku.command_palette.search.read(cx).content().to_owned();
-                    waku.refresh_command_palette_results(&query, false, cx);
+                if launcher.command_palette.view == CommandPaletteView::Resume {
+                    let query = launcher
+                        .command_palette
+                        .search
+                        .read(cx)
+                        .content()
+                        .to_owned();
+                    launcher.refresh_command_palette_results(&query, false, cx);
                 }
                 cx.notify();
             });
@@ -1490,13 +1495,13 @@ impl Waku {
         let window_handle = window.window_handle();
         cx.notify();
 
-        cx.spawn(async move |waku, cx| {
+        cx.spawn(async move |launcher, cx| {
             let result = cx.background_executor().spawn(async move { fetch() }).await;
-            let update = waku.update(cx, |waku, cx| {
-                if !waku.command_palette.open
-                    || waku.command_palette.view != CommandPaletteView::Resume
-                    || waku.command_palette.provider_session_generation != generation
-                    || waku
+            let update = launcher.update(cx, |launcher, cx| {
+                if !launcher.command_palette.open
+                    || launcher.command_palette.view != CommandPaletteView::Resume
+                    || launcher.command_palette.provider_session_generation != generation
+                    || launcher
                         .command_palette
                         .provider_session_import
                         .as_ref()
@@ -1508,9 +1513,9 @@ impl Waku {
                     Ok(history) => Some((summary, history)),
                     Err(error) => {
                         let error = error.to_string();
-                        waku.command_palette.provider_session_import = None;
-                        waku.command_palette.provider_session_error = Some(error.clone());
-                        waku.show_toast(tr!("command_palette.resume_failed", error = error));
+                        launcher.command_palette.provider_session_import = None;
+                        launcher.command_palette.provider_session_error = Some(error.clone());
+                        launcher.show_toast(tr!("command_palette.resume_failed", error = error));
                         cx.notify();
                         None
                     }
@@ -1520,12 +1525,12 @@ impl Waku {
                 return;
             };
             let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = waku.update(cx, |waku, cx| {
-                    if waku.command_palette.open
-                        && waku.command_palette.view == CommandPaletteView::Resume
-                        && waku.command_palette.provider_session_generation == generation
+                let _ = launcher.update(cx, |launcher, cx| {
+                    if launcher.command_palette.open
+                        && launcher.command_palette.view == CommandPaletteView::Resume
+                        && launcher.command_palette.provider_session_generation == generation
                     {
-                        waku.import_provider_session(summary, history, window, cx);
+                        launcher.import_provider_session(summary, history, window, cx);
                     }
                 });
             });

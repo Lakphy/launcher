@@ -1,4 +1,4 @@
-import type { ProviderKind } from '@waku/client';
+import type { ProviderKind } from '@launcher/client';
 import type { ImageSourcePropType } from 'react-native';
 
 /** Raster copies of provider-icons.ts for native menu image sources.

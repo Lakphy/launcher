@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
-import type { Command, MessageAttachment, WakuClient } from '@waku/client';
+import type { Command, MessageAttachment, LauncherClient } from '@launcher/client';
 
 import {
   attachmentImageQuery,
@@ -16,7 +16,7 @@ const imageAttachment: MessageAttachment = {
   name: 'photo.png',
   is_dir: false,
   is_image: true,
-  blob_reference: 'waku-attachment:photo',
+  blob_reference: 'launcher-attachment:photo',
 };
 
 describe('mobile attachments', () => {
@@ -28,14 +28,14 @@ describe('mobile attachments', () => {
         return {
           type: 'attachmentStored',
           attachment: {
-            reference: 'waku-attachment:file',
+            reference: 'launcher-attachment:file',
             path: '/daemon/blobs/photo.png',
             name: 'photo.png',
             isDir: false,
           },
         };
       },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
 
     const attachment = await importLocalAttachment(client, {
       uri: 'file:///photo.png',
@@ -56,12 +56,12 @@ describe('mobile attachments', () => {
       name: 'photo.png',
       is_dir: false,
       is_image: true,
-      blob_reference: 'waku-attachment:file',
+      blob_reference: 'launcher-attachment:file',
     });
   });
 
   test('rejects an oversized file before reading or uploading it', async () => {
-    const client = { request: () => Promise.reject(new Error('should not upload')) } as unknown as WakuClient;
+    const client = { request: () => Promise.reject(new Error('should not upload')) } as unknown as LauncherClient;
     await expect(importLocalAttachment(client, {
       uri: 'file:///large.zip',
       name: 'large.zip',
@@ -83,12 +83,12 @@ describe('mobile attachment previews', () => {
         commands.push(command);
         return { type: 'blobData', bytes: 'aW1hZ2U=' };
       },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
 
     expect(await readAttachmentImage(client, imageAttachment)).toBe('data:image/png;base64,aW1hZ2U=');
     expect(commands).toEqual([{
       type: 'readAttachment',
-      reference: 'waku-attachment:photo',
+      reference: 'launcher-attachment:photo',
       path: '/daemon/attachments/photo.png',
     }]);
   });
@@ -100,21 +100,21 @@ describe('mobile attachment previews', () => {
         commands.push(command);
         return { type: 'blobData', bytes: 'aW1hZ2U=' };
       },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
 
     const source = await readAttachmentImage(client, {
       ...imageAttachment,
       name: 'Camera.JPG',
-      blob_reference: 'waku-blob:photo',
+      blob_reference: 'launcher-blob:photo',
     });
     expect(source).toBe('data:image/jpeg;base64,aW1hZ2U=');
-    expect(commands).toEqual([{ type: 'readBlob', reference: 'waku-blob:photo' }]);
+    expect(commands).toEqual([{ type: 'readBlob', reference: 'launcher-blob:photo' }]);
   });
 
   test('preserves SVG MIME types for the native SVG renderer', async () => {
     const client = {
       request: async () => ({ type: 'blobData', bytes: 'PHN2Zy8+' }),
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     expect(await readAttachmentImage(client, { ...imageAttachment, name: 'logo.svg' }))
       .toBe('data:image/svg+xml;base64,PHN2Zy8+');
   });
@@ -123,7 +123,7 @@ describe('mobile attachment previews', () => {
     let requests = 0;
     const client = {
       request: async () => { requests++; return { type: 'ack' }; },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     await expect(readAttachmentImage(client, { ...imageAttachment, blob_reference: null }))
       .rejects.toThrow('no daemon reference');
     expect(requests).toBe(0);
@@ -134,7 +134,7 @@ describe('mobile attachment previews', () => {
     let requests = 0;
     const client = {
       request: async () => { requests++; return { type: 'blobData', bytes: 'aW1hZ2U=' }; },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     const cache = new QueryClient();
     const profile = { id: 'desktop', address: 'ws://desktop:4096' };
     const options = attachmentImageQuery(client, profile, imageAttachment, true);
@@ -157,7 +157,7 @@ describe('mobile attachment previews', () => {
     let requests = 0;
     const client = {
       request: async () => { requests++; return { type: 'blobData', bytes: 'aW1hZ2U=' }; },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     const cache = new QueryClient();
     const profile = { id: 'desktop', address: 'ws://desktop:4096' };
     const observer = new QueryObserver(cache, attachmentImageQuery(client, profile, imageAttachment, false));
@@ -188,10 +188,10 @@ describe('mobile attachment previews', () => {
     let resolveOld!: (response: unknown) => void;
     const oldClient = {
       request: () => new Promise((resolve) => { resolveOld = resolve; }),
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     const newClient = {
       request: async () => ({ type: 'blobData', bytes: 'bmV3' }),
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     const cache = new QueryClient();
     const previous = attachmentImageQuery(oldClient, { id: 'desktop', address: 'ws://old' }, imageAttachment, true);
     const edited = attachmentImageQuery(newClient, { id: 'desktop', address: 'ws://new' }, imageAttachment, true);

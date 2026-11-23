@@ -8,7 +8,12 @@ import { createInterface } from "node:readline/promises";
 const projectRoot = resolve(import.meta.dir, "..");
 const userHome = homedir();
 const library = join(userHome, "Library");
-const debugBundleIdentifiers = ["sh.waku.dev", "codes.waku.dev"];
+const debugBundleIdentifiers = [
+  "dev.lakphy.launcher.dev",
+  // Bundle ids this checkout used before it became Launcher.
+  "sh.waku.dev",
+  "codes.waku.dev",
+];
 
 type Target = {
   path: string;
@@ -22,7 +27,7 @@ function addCandidate(path: string): void {
 }
 
 function isDebugDiagnostic(name: string): boolean {
-  return /^Waku Debug(?: Computer Use)?[-_.]/.test(name);
+  return /^Launcher Debug(?: Computer Use)?[-_.]/.test(name);
 }
 
 async function addMatchingChildren(
@@ -64,38 +69,39 @@ async function existingTargets(): Promise<Target[]> {
 
 // Checkout-local state and build artifacts. Keep the release cache intact.
 addCandidate(join(projectRoot, "temp"));
-addCandidate(join(projectRoot, ".waku-cache", "computer-use", "debug"));
-addCandidate(join(projectRoot, "target", "debug", "Waku Debug.app"));
+addCandidate(join(projectRoot, ".launcher-cache", "computer-use", "debug"));
+addCandidate(join(projectRoot, "target", "debug", "Launcher Debug.app"));
 
 if (process.env.CARGO_TARGET_DIR) {
   addCandidate(
     join(
       resolve(projectRoot, process.env.CARGO_TARGET_DIR),
       "debug",
-      "Waku Debug.app",
+      "Launcher Debug.app",
     ),
   );
 }
 
 // Debug app bundles that may have been copied outside the checkout.
-addCandidate(join(userHome, "Applications", "Waku Debug.app"));
-addCandidate("/Applications/Waku Debug.app");
+addCandidate(join(userHome, "Applications", "Launcher Debug.app"));
+addCandidate("/Applications/Launcher Debug.app");
 
-// Debug-only app data. The release app uses Waku/sh.waku and is not included.
-addCandidate(join(library, "Application Support", "Waku Debug"));
+// Debug-only app data. The release app uses Launcher/dev.lakphy.launcher and is not included.
+addCandidate(join(library, "Application Support", "Launcher Debug"));
 addCandidate(
   join(
     library,
     "Application Support",
-    "Waku",
+    "Launcher",
     "Computer Use",
-    "Waku Debug Computer Use.app",
+    "Launcher Debug Computer Use.app",
   ),
 );
-addCandidate(join(library, "Caches", "Waku Debug"));
-addCandidate(join(library, "Logs", "Waku Debug"));
+addCandidate(join(library, "Caches", "Launcher Debug"));
+addCandidate(join(library, "Logs", "Launcher Debug"));
 
-// codes.waku.dev was Waku Debug's bundle ID before sh.waku.dev.
+// sh.waku.dev and codes.waku.dev are Waku Debug bundle ids left by this
+// checkout before the rename. dev.lakphy.launcher.dev is Launcher Debug.
 for (const bundleIdentifier of debugBundleIdentifiers) {
   for (const path of [
     join(library, "Application Support", bundleIdentifier),
@@ -137,18 +143,18 @@ await addMatchingChildren(
 
 const targets = await existingTargets();
 if (targets.length === 0) {
-  console.log("No Waku Debug files or directories found.");
+  console.log("No Launcher Debug files or directories found.");
   process.exit(0);
 }
 
 console.log(
-  "The following Waku Debug paths, including directory contents, will be permanently deleted:\n",
+  "The following Launcher Debug paths, including directory contents, will be permanently deleted:\n",
 );
 for (const target of targets) {
   console.log(`  [${target.kind}] ${target.path}`);
 }
 
-const runningProcesses = ["Waku Debug", "Waku Debug Computer Use"].filter(
+const runningProcesses = ["Launcher Debug", "Launcher Debug Computer Use"].filter(
   (name) =>
     Bun.spawnSync(["/usr/bin/pgrep", "-x", name], {
       stdout: "ignore",

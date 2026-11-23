@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { WakuClient } from '@waku/client';
+import type { LauncherClient } from '@launcher/client';
 
 import { browseDaemonDirectory, createProject, daemonKeys, discoverComposerCommands, listComposerFiles, persistProject, providerSessionKey } from './daemon-api';
 
@@ -14,7 +14,7 @@ describe('mobile daemon API', () => {
           ? { type: 'projectFiles', entries: files }
           : { type: 'slashCommands', commands: [] } };
       },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
     expect(await discoverComposerCommands(client, 'codex', '/worktree', '/opt/codex')).toEqual([]);
     expect(await listComposerFiles(client, '/worktree')).toEqual(files);
     expect(commands).toEqual([
@@ -38,7 +38,7 @@ describe('mobile daemon API', () => {
   });
 
   test('rejects unexpected catalog replies instead of caching an empty success', async () => {
-    const client = { request: async () => ({ type: 'ack' }) } as unknown as WakuClient;
+    const client = { request: async () => ({ type: 'ack' }) } as unknown as LauncherClient;
     await expect(listComposerFiles(client, '/repo')).rejects.toThrow('Expected daemon response workspace');
     await expect(discoverComposerCommands(client, 'codex', '/repo', null)).rejects.toThrow('Expected daemon response workspace');
   });
@@ -62,7 +62,7 @@ describe('mobile daemon API', () => {
         command = next;
         return { type: 'workspace', result: directory };
       },
-    } as unknown as WakuClient;
+    } as unknown as LauncherClient;
 
     await expect(browseDaemonDirectory(client, null)).resolves.toEqual(directory);
     expect(command).toEqual({
@@ -72,14 +72,14 @@ describe('mobile daemon API', () => {
   });
 
   test('normalizes absolute Unix and Windows project paths', () => {
-    expect(createProject('/srv/waku/', 'one', 10)).toEqual({
+    expect(createProject('/srv/launcher/', 'one', 10)).toEqual({
       id: 'one',
-      name: 'waku',
-      path: '/srv/waku',
+      name: 'launcher',
+      path: '/srv/launcher',
       created_at: 10,
     });
-    expect(createProject('C:\\dev\\waku\\', 'two', 10).name).toBe('waku');
-    expect(() => createProject('dev/waku', 'three')).toThrow('absolute path');
+    expect(createProject('C:\\dev\\launcher\\', 'two', 10).name).toBe('launcher');
+    expect(() => createProject('dev/launcher', 'three')).toThrow('absolute path');
   });
 
   test('persists a project without replacing sessions', async () => {
@@ -97,8 +97,8 @@ describe('mobile daemon API', () => {
         }
         return { type: 'taskStateSaved', revision: 3, sessions: [] };
       },
-    } as unknown as WakuClient;
-    const project = createProject('/srv/waku', 'project', 10);
+    } as unknown as LauncherClient;
+    const project = createProject('/srv/launcher', 'project', 10);
 
     const saved = await persistProject(client, project);
     expect(saved.project).toEqual(project);

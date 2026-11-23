@@ -1,1 +1,1 @@
-export * from '@waku/client/composer-autocomplete'
+export * from '@launcher/client/composer-autocomplete'

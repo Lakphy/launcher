@@ -2,7 +2,7 @@
 //
 // Build and package the Windows release: a portable zip and the Inno Setup
 // installer the in-app updater re-runs silently. Mirrors bundle-linux.sh for
-// the archive half and resources/windows/waku.iss for the installer half.
+// the archive half and resources/windows/launcher.iss for the installer half.
 //
 // Usage:
 //   bun scripts/bundle-windows.ts
@@ -18,7 +18,7 @@ import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const packageName = "waku";
+const packageName = "launcher";
 const projectRoot = resolve(import.meta.dir, "..");
 
 /** The updater picks its feed by Rust arch name, so the installer carries
@@ -120,16 +120,16 @@ if (!targetTriple || !architecture) {
   throw new Error(`Unsupported Windows target ${targetTriple ?? "(unknown)"}`);
 }
 
-const packageDirectoryName = `waku-${version}-${targetTriple}`;
+const packageDirectoryName = `launcher-${version}-${targetTriple}`;
 const archive = join(releaseDirectory, `${packageDirectoryName}.zip`);
 const installer = join(
   releaseDirectory,
-  `Waku-${version}-${architecture}-Setup.exe`,
+  `Launcher-${version}-${architecture}-Setup.exe`,
 );
 
-await $`cargo build --locked --release --package waku --bin waku --bin waku_js_repl --package waku-daemon --bin waku-daemon --package waku-computer-use --bin waku_computer_use`;
+await $`cargo build --locked --release --package launcher --bin launcher --bin launcher_js_repl --package launcher-daemon --bin launcher-daemon --package launcher-computer-use --bin launcher_computer_use`;
 
-const staging = await mkdtemp(join(tmpdir(), "waku-bundle-"));
+const staging = await mkdtemp(join(tmpdir(), "launcher-bundle-"));
 try {
   // Both executables stay side by side: the app resolves the daemon next to
   // itself, so the layout is what makes an extracted zip runnable in place.
@@ -140,7 +140,7 @@ try {
     join(packageDirectory, "resources"),
     "release",
   );
-  for (const file of ["waku.exe", "waku-daemon.exe"]) {
+  for (const file of ["launcher.exe", "launcher-daemon.exe"]) {
     await copyFile(join(releaseDirectory, file), join(packageDirectory, file));
   }
   await copyFile(
@@ -160,10 +160,10 @@ try {
     await writeFile(certificate, Buffer.from(certificateData, "base64"));
     signtool = findSigntool();
     await sign(signtool, certificate, certificatePassword, [
-      join(packageDirectory, "waku.exe"),
-      join(packageDirectory, "waku-daemon.exe"),
-      join(packageDirectory, "waku_js_repl.exe"),
-      join(packageDirectory, "waku_computer_use.exe"),
+      join(packageDirectory, "launcher.exe"),
+      join(packageDirectory, "launcher-daemon.exe"),
+      join(packageDirectory, "launcher_js_repl.exe"),
+      join(packageDirectory, "launcher_computer_use.exe"),
       join(packageDirectory, "cua_driver_sdk.dll"),
       join(packageDirectory, "cua-driver-uia.exe"),
     ]);
@@ -182,7 +182,7 @@ try {
   // The installer is what the in-app updater downloads and re-runs, so it
   // ships from the same signed staging directory as the zip.
   await rm(installer, { force: true });
-  await $`${findInnoSetupCompiler()} ${`/DAppVersion=${version}`} ${`/DArch=${architecture}`} ${`/DStageDir=${packageDirectory}`} ${`/DOutputDir=${releaseDirectory}`} ${join(projectRoot, "resources", "windows", "waku.iss")}`;
+  await $`${findInnoSetupCompiler()} ${`/DAppVersion=${version}`} ${`/DArch=${architecture}`} ${`/DStageDir=${packageDirectory}`} ${`/DOutputDir=${releaseDirectory}`} ${join(projectRoot, "resources", "windows", "launcher.iss")}`;
   if (!existsSync(installer)) {
     throw new Error(`ISCC did not produce ${installer}`);
   }

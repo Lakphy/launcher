@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Waku</string>
+    <string>Launcher</string>
     <key>CFBundleExecutable</key>
-    <string>Waku</string>
+    <string>Launcher</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>sh.waku</string>
+    <string>dev.lakphy.launcher</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Waku</string>
+    <string>Launcher</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -24,12 +24,12 @@
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
-    <!-- Sparkle auto-update configuration. The appcast feed lives in the
-         waku-releases Cloudflare R2 bucket behind releases.waku.sh, and the
-         private half of SUPublicEDKey signs each archive from the login
-         keychain during `bun run release` (see RELEASING.md). -->
-    <key>SUFeedURL</key>
-    <string>https://releases.waku.sh/appcast.xml</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Lakphy. Launcher is a modified version of Waku (https://github.com/egoist/waku). Licensed under the GNU GPL v3.0 only. This program comes with ABSOLUTELY NO WARRANTY.</string>
+    <!-- In-app updates are disabled: there is no SUFeedURL. SUPublicEDKey is
+         still Waku's public key. Generate a new Sparkle key, replace this
+         value, and set SUFeedURL to a feed you control before publishing
+         Launcher updates. Do not point that feed at releases.waku.sh. -->
     <key>SUPublicEDKey</key>
     <string>gv9GLMPjH5yMQkZMFXnoNfHOyL8/7KGzl/jzAqlzZZY=</string>
 	<key>NSHighResolutionCapable</key>

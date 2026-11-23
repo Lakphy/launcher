@@ -1,5 +1,5 @@
-import type { AgentSession, Checkpoint, Message } from '@waku/client';
-import { formatMessageTime } from '@waku/client/transcript-presentation';
+import type { AgentSession, Checkpoint, Message } from '@launcher/client';
+import { formatMessageTime } from '@launcher/client/transcript-presentation';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { memo, useEffect, useState } from 'react';

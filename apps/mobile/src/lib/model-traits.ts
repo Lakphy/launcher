@@ -1,4 +1,4 @@
-import type { ProviderModel, ProviderModelOption } from '@waku/client';
+import type { ProviderModel, ProviderModelOption } from '@launcher/client';
 
 export interface ModelTraitSelection {
   reasoningEffort: string | null;

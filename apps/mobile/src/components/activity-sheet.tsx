@@ -3,8 +3,8 @@ import {
   BottomSheetView,
   type BottomSheetMethods,
 } from '@expo/ui/community/bottom-sheet';
-import type { ActivityFileChange, ActivityItem, AgentSession } from '@waku/client';
-import { activitiesForBlock } from '@waku/client/event-reducer';
+import type { ActivityFileChange, ActivityItem, AgentSession } from '@launcher/client';
+import { activitiesForBlock } from '@launcher/client/event-reducer';
 import {
   activityActionLabel,
   activityDisclosureSections,
@@ -13,7 +13,7 @@ import {
   activityPreview,
   activityRowDetail,
   reasoningTitle,
-} from '@waku/client/transcript-presentation';
+} from '@launcher/client/transcript-presentation';
 import {
   createContext,
   useCallback,

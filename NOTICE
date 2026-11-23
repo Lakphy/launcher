@@ -1,0 +1,33 @@
+Launcher
+Copyright (C) 2026 Lakphy
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 of the License only.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+## Modifications
+
+Lakphy modified this program on 2026-11-23 and released the modified
+version under the name Launcher.
+
+Source for this version: https://github.com/Lakphy/launcher
+
+## Original work
+
+Launcher is a modified version of Waku.
+Original source: https://github.com/egoist/waku
+Copyright (C) 2026 egoist and the Waku contributors.
+
+The name Waku and the original source remain with egoist and the Waku
+contributors. Launcher is an independent modification by Lakphy.
+
+The file named LICENSE is the GNU General Public License version 3,
+unchanged.

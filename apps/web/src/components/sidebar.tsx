@@ -1,11 +1,11 @@
-import type { AgentSession } from '@waku/client'
+import type { AgentSession } from '@launcher/client'
 import { ContextMenu } from '@base-ui/react/context-menu'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PanelResizeHandle } from '@/components/panel-resize-handle'
-import { WakuIcon } from '@/components/waku-icon'
+import { LauncherIcon } from '@/components/launcher-icon'
 import { displayTitle, type TaskState } from '@/lib/daemon-api'
 import { useDaemon } from '@/lib/daemon-context'
 import { useI18n } from '@/lib/i18n'
@@ -18,7 +18,7 @@ import {
   type SessionItem,
 } from '@/lib/sidebar-presentation'
 import { cn } from '@/lib/utils'
-import wakuAppIconUrl from '../../../../website/public/app-icon.png'
+import launcherAppIconUrl from '../../../../website/public/app-icon.png'
 
 interface SidebarProps {
   taskState: TaskState
@@ -109,10 +109,10 @@ export function Sidebar({
       >
         <header className="flex h-12 shrink-0 items-center px-2.5">
           <img
-            alt="Waku"
+            alt="Launcher"
             className="size-6 rounded-md"
             draggable={false}
-            src={wakuAppIconUrl}
+            src={launcherAppIconUrl}
           />
           <div className="flex-1" />
           <Button
@@ -121,12 +121,12 @@ export function Sidebar({
             variant="ghost"
             onClick={onToggleSidebar}
           >
-            <WakuIcon name="panelLeft" />
+            <LauncherIcon name="panelLeft" />
           </Button>
         </header>
         <div className="px-2.5">
           <SidebarAction
-            icon={<WakuIcon name="pencil" />}
+            icon={<LauncherIcon name="pencil" />}
             label={t('menu.new_task')}
             onClick={() => {
               onNewTask()
@@ -147,7 +147,7 @@ export function Sidebar({
                 return (
                   <div className="h-[42px] px-2.5">
                     <SidebarAction
-                      icon={<WakuIcon name="search" />}
+                      icon={<LauncherIcon name="search" />}
                       label={t('sidebar.search')}
                       onClick={onSearch}
                     />
@@ -186,7 +186,7 @@ export function Sidebar({
                         }}
                       >
                         {t(GROUP_TRANSLATION_KEYS[row.group.id])}
-                        <WakuIcon
+                        <LauncherIcon
                           className="size-3 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
                           name={row.collapsed ? 'chevronRight' : 'chevronDown'}
                         />
@@ -199,7 +199,7 @@ export function Sidebar({
                           variant="ghost"
                           onClick={onAddProject}
                         >
-                          <WakuIcon name="folderNew" />
+                          <LauncherIcon name="folderNew" />
                         </Button>
                       )}
                     </div>
@@ -234,7 +234,7 @@ export function Sidebar({
             variant="ghost"
             onClick={onSettings}
           >
-            <WakuIcon name="settings" />
+            <LauncherIcon name="settings" />
           </Button>
           <div className="flex-1" />
           <ConnectionDot />
@@ -396,11 +396,11 @@ function SessionRow({
       <ContextMenu.Portal>
         <ContextMenu.Positioner className="z-[100] outline-none">
           <ContextMenu.Popup
-            className="waku-menu-surface"
+            className="launcher-menu-surface"
             finalFocus={false}
           >
             <ContextMenu.Item
-              className="waku-menu-item"
+              className="launcher-menu-item"
               onClick={() => {
                 restoreMenuFocus.current = false
                 setMenuOpen(false)
@@ -409,18 +409,18 @@ function SessionRow({
                 setRenaming(true)
               }}
             >
-              <WakuIcon className="size-3" name="pencil" /> {t('common.rename')}
+              <LauncherIcon className="size-3" name="pencil" /> {t('common.rename')}
             </ContextMenu.Item>
-            <ContextMenu.Separator className="waku-menu-separator" />
+            <ContextMenu.Separator className="launcher-menu-separator" />
             <ContextMenu.Item
-              className="waku-menu-item text-destructive data-[highlighted]:bg-[var(--danger-soft)]"
+              className="launcher-menu-item text-destructive data-[highlighted]:bg-[var(--danger-soft)]"
               onClick={() => {
                 restoreMenuFocus.current = false
                 setMenuOpen(false)
                 void onRemove(item.session.id).catch(() => {})
               }}
             >
-              <WakuIcon className="size-3" name="trash" /> {t('common.remove')}
+              <LauncherIcon className="size-3" name="trash" /> {t('common.remove')}
             </ContextMenu.Item>
           </ContextMenu.Popup>
         </ContextMenu.Positioner>
@@ -433,7 +433,7 @@ function SessionMetadata({ item, nowSeconds, t }: { item: SessionItem; nowSecond
   const timeLabel = sessionTimeLabel(item.session, nowSeconds, t)
   return (
     <span className="flex w-full min-w-0 items-center gap-1.5 text-[11.5px] leading-[15px] text-[var(--text-tertiary)]">
-      <WakuIcon className="size-[11px] shrink-0" name="folder" />
+      <LauncherIcon className="size-[11px] shrink-0" name="folder" />
       <span className="min-w-0 flex-1 truncate">{item.projectName}</span>
       {timeLabel && (
         <span className={cn(
@@ -450,15 +450,15 @@ function SessionMetadata({ item, nowSeconds, t }: { item: SessionItem; nowSecond
 function SessionStatus({ status, t }: { status: AgentSession['status']; t: Translator }) {
   if (status === 'idle') return null
   if (status === 'working' || status === 'connecting') {
-    return <WakuIcon label={t('sidebar.status_working')} className="size-3 text-[var(--success)] motion-safe:animate-spin" name="loaderCircle" />
+    return <LauncherIcon label={t('sidebar.status_working')} className="size-3 text-[var(--success)] motion-safe:animate-spin" name="loaderCircle" />
   }
   if (status === 'background') {
-    return <WakuIcon label={t('sidebar.status_background')} className="size-3 text-[var(--text-secondary)]" name="hourglass" />
+    return <LauncherIcon label={t('sidebar.status_background')} className="size-3 text-[var(--text-secondary)]" name="hourglass" />
   }
   if (status === 'waiting') {
-    return <WakuIcon label={t('sidebar.status_waiting')} className="size-3 text-[var(--warning)]" name="alert" />
+    return <LauncherIcon label={t('sidebar.status_waiting')} className="size-3 text-[var(--warning)]" name="alert" />
   }
-  return <WakuIcon label={t('sidebar.status_failed')} className="size-3 text-destructive" name="x" />
+  return <LauncherIcon label={t('sidebar.status_failed')} className="size-3 text-destructive" name="x" />
 }
 
 function ConnectionDot() {

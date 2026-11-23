@@ -14,56 +14,57 @@ import { parseArgs } from "node:util";
 import { defaultDownloadUrlPrefix, generateAppcast } from "./appcast";
 import { extractReleaseNotes } from "./changelog";
 
-const appName = "Waku";
-const executableName = "Waku";
-const jsReplExecutableName = "waku_js_repl";
-const daemonExecutableName = "waku-daemon";
-const computerUseHelperName = "Waku Computer Use";
-const packageName = "waku";
+const appName = "Launcher";
+const executableName = "Launcher";
+const jsReplExecutableName = "launcher_js_repl";
+const daemonExecutableName = "launcher-daemon";
+const computerUseHelperName = "Launcher Computer Use";
+const packageName = "launcher";
 const defaultNotaryProfile = "NOTARY";
 const projectRoot = resolve(import.meta.dir, "..");
 
-const help = `Build, notarize, and publish a production release of Waku.
+const help = `Build, notarize, and publish a production release of Launcher.
 
 Usage:
   bun run release [options]
 
 The default run builds a signed, notarized DMG, packages the Sparkle update
 archive, regenerates the signed appcast (with binary deltas against recent
-releases), and uploads everything to Cloudflare R2 — the bucket behind
-https://releases.waku.sh. One-time setup lives in RELEASING.md.
+releases), and uploads everything to Cloudflare R2. Set
+LAUNCHER_DOWNLOAD_URL_PREFIX to a host you control. Do not publish to
+releases.waku.sh. One-time setup lives in RELEASING.md.
 
 Options:
   --local                       Build, notarize, and write the DMG + zip
                                 without publishing to R2
   --force                       Publish even if this version is already in R2
-  --output <path>               DMG output path (default: dist/Waku-<version>.dmg)
+  --output <path>               DMG output path (default: dist/Launcher-<version>.dmg)
   --signing-identity <name>     Developer ID Application identity selector
-                                (or WAKU_SIGNING_IDENTITY; required unless --adhoc)
+                                (or LAUNCHER_SIGNING_IDENTITY; required unless --adhoc)
   --notary-profile <name>       notarytool keychain profile
-                                (default: NOTARY; or WAKU_NOTARY_PROFILE)
-  --build-number <number>       CFBundleVersion override (or WAKU_BUILD_NUMBER;
+                                (default: NOTARY; or LAUNCHER_NOTARY_PROFILE)
+  --build-number <number>       CFBundleVersion override (or LAUNCHER_BUILD_NUMBER;
                                 default derives a monotonic number from the
                                 Cargo version)
-  --volume-name <name>          Mounted DMG name (default: Waku)
-  --skip-build                  Reuse target/release/waku, waku_js_repl, and
-                                waku-daemon
+  --volume-name <name>          Mounted DMG name (default: Launcher)
+  --skip-build                  Reuse target/release/launcher, launcher_js_repl, and
+                                launcher-daemon
   --skip-notarize               Unnotarized signed DMG (implies --local)
   --adhoc                       Ad-hoc sign, no notarization (implies --local)
   --help                        Show this help
 
 Environment:
-  WAKU_SIGNING_IDENTITY         Developer ID Application identity selector
-  WAKU_ANALYTICS_ENDPOINT       analytics endpoint embedded at build time
-  WAKU_ANALYTICS_WEBSITE_ID     analytics website ID embedded at build time
-  WAKU_R2_REMOTE                rclone remote name (default: r2)
-  WAKU_R2_BUCKET                R2 bucket name (default: waku-releases)
-  WAKU_DOWNLOAD_URL_PREFIX      base URL served by the bucket
+  LAUNCHER_SIGNING_IDENTITY         Developer ID Application identity selector
+  LAUNCHER_ANALYTICS_ENDPOINT       analytics endpoint embedded at build time
+  LAUNCHER_ANALYTICS_WEBSITE_ID     analytics website ID embedded at build time
+  LAUNCHER_R2_REMOTE                rclone remote name (default: r2)
+  LAUNCHER_R2_BUCKET                R2 bucket name (default: launcher-releases)
+  LAUNCHER_DOWNLOAD_URL_PREFIX      base URL for archive links
                                 (default: ${defaultDownloadUrlPrefix})
-  WAKU_HISTORY_COUNT            prior archives pulled for deltas (default: 15)
-  WAKU_NO_HISTORY=1             skip pulling prior archives (no deltas)
+  LAUNCHER_HISTORY_COUNT            prior archives pulled for deltas (default: 15)
+  LAUNCHER_NO_HISTORY=1             skip pulling prior archives (no deltas)
   SPARKLE_BIN                   Sparkle tools dir (default: the bundle.sh cache
-                                under .waku-cache/sparkle)
+                                under .launcher-cache/sparkle)
   SPARKLE_PRIVATE_KEY           Sparkle EdDSA private key (otherwise keychain)
 
 Before the first production release:
@@ -137,38 +138,38 @@ function derivedBuildNumber(version: string): string {
 const adhoc = values.adhoc ?? false;
 const skipNotarize = values["skip-notarize"] ?? false;
 const configuredSigningIdentity =
-  values["signing-identity"] ?? process.env.WAKU_SIGNING_IDENTITY;
+  values["signing-identity"] ?? process.env.LAUNCHER_SIGNING_IDENTITY;
 const notaryProfile =
   values["notary-profile"] ??
-  process.env.WAKU_NOTARY_PROFILE ??
+  process.env.LAUNCHER_NOTARY_PROFILE ??
   defaultNotaryProfile;
 const explicitBuildNumber =
-  values["build-number"] ?? process.env.WAKU_BUILD_NUMBER;
-const analyticsEndpoint = process.env.WAKU_ANALYTICS_ENDPOINT?.trim();
-const analyticsWebsiteId = process.env.WAKU_ANALYTICS_WEBSITE_ID?.trim();
+  values["build-number"] ?? process.env.LAUNCHER_BUILD_NUMBER;
+const analyticsEndpoint = process.env.LAUNCHER_ANALYTICS_ENDPOINT?.trim();
+const analyticsWebsiteId = process.env.LAUNCHER_ANALYTICS_WEBSITE_ID?.trim();
 const localOnly = values.local ?? false;
 const force = values.force ?? false;
 // Publishing requires a Developer ID-signed, notarized DMG, so the flags that
 // weaken signing imply --local.
 const publishing = !localOnly && !adhoc && !skipNotarize;
 
-const r2Remote = process.env.WAKU_R2_REMOTE ?? "r2";
-const r2Bucket = process.env.WAKU_R2_BUCKET ?? "waku-releases";
+const r2Remote = process.env.LAUNCHER_R2_REMOTE ?? "r2";
+const r2Bucket = process.env.LAUNCHER_R2_BUCKET ?? "launcher-releases";
 const r2Destination = `${r2Remote}:${r2Bucket}`;
 // A bucket-scoped R2 API token cannot create buckets, and rclone otherwise
 // checks/creates one before writing. The bucket must already exist.
 const rcloneFlags = ["--s3-no-check-bucket"];
 const downloadUrlPrefix =
-  process.env.WAKU_DOWNLOAD_URL_PREFIX ?? defaultDownloadUrlPrefix;
-const historyCount = Number(process.env.WAKU_HISTORY_COUNT ?? "15");
-const skipHistory = process.env.WAKU_NO_HISTORY === "1";
+  process.env.LAUNCHER_DOWNLOAD_URL_PREFIX ?? defaultDownloadUrlPrefix;
+const historyCount = Number(process.env.LAUNCHER_HISTORY_COUNT ?? "15");
+const skipHistory = process.env.LAUNCHER_NO_HISTORY === "1";
 
 if (adhoc && values["signing-identity"]) {
   throw new Error("Use either --adhoc or --signing-identity, not both.");
 }
 if (!adhoc && !configuredSigningIdentity) {
   throw new Error(
-    "Set WAKU_SIGNING_IDENTITY or pass --signing-identity (or use --adhoc).",
+    "Set LAUNCHER_SIGNING_IDENTITY or pass --signing-identity (or use --adhoc).",
   );
 }
 if (explicitBuildNumber && !/^\d+(?:\.\d+){0,2}$/.test(explicitBuildNumber)) {
@@ -177,11 +178,11 @@ if (explicitBuildNumber && !/^\d+(?:\.\d+){0,2}$/.test(explicitBuildNumber)) {
   );
 }
 if (!Number.isSafeInteger(historyCount) || historyCount < 0) {
-  throw new Error("WAKU_HISTORY_COUNT must be a non-negative integer.");
+  throw new Error("LAUNCHER_HISTORY_COUNT must be a non-negative integer.");
 }
 if (!values["skip-build"] && (!analyticsEndpoint || !analyticsWebsiteId)) {
   throw new Error(
-    "Set WAKU_ANALYTICS_ENDPOINT and WAKU_ANALYTICS_WEBSITE_ID before building a release.",
+    "Set LAUNCHER_ANALYTICS_ENDPOINT and LAUNCHER_ANALYTICS_WEBSITE_ID before building a release.",
   );
 }
 
@@ -244,8 +245,8 @@ if (publishing) {
     if (detail.includes("directory not found")) {
       throw new Error(
         `R2 bucket "${r2Bucket}" does not exist on remote "${r2Remote}". ` +
-          "Create it in the Cloudflare dashboard and attach the " +
-          "releases.waku.sh custom domain (see RELEASING.md), then re-run.",
+          "Create it in the Cloudflare dashboard and set " +
+          "LAUNCHER_DOWNLOAD_URL_PREFIX (see RELEASING.md), then re-run.",
       );
     }
     throw new Error(`Cannot reach ${r2Destination}: ${detail}`);
@@ -291,7 +292,7 @@ const bundledComputerUseSkill = join(
   contentsDirectory,
   "Resources",
   "skills",
-  "waku-computer-use",
+  "launcher-computer-use",
   "SKILL.md",
 );
 const bundledPiComputerUseExtension = join(
@@ -325,7 +326,7 @@ async function verifyJavaScriptRepl(executable: string): Promise<void> {
       params: {
         protocolVersion: "2025-06-18",
         capabilities: {},
-        clientInfo: { name: "waku-release", version: "1" },
+        clientInfo: { name: "launcher-release", version: "1" },
       },
     },
     { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
@@ -411,7 +412,7 @@ try {
       ? "Assembling the app bundle"
       : "Building and assembling the app bundle",
   );
-  await $`env WAKU_CODESIGN_IDENTITY=${identity} WAKU_ANALYTICS_ENDPOINT=${analyticsEndpoint ?? ""} WAKU_ANALYTICS_WEBSITE_ID=${analyticsWebsiteId ?? ""} WAKU_SKIP_CARGO_BUILD=${values["skip-build"] ? "1" : "0"} ${join(projectRoot, "scripts", "bundle.sh")} release`;
+  await $`env LAUNCHER_CODESIGN_IDENTITY=${identity} LAUNCHER_ANALYTICS_ENDPOINT=${analyticsEndpoint ?? ""} LAUNCHER_ANALYTICS_WEBSITE_ID=${analyticsWebsiteId ?? ""} LAUNCHER_SKIP_CARGO_BUILD=${values["skip-build"] ? "1" : "0"} ${join(projectRoot, "scripts", "bundle.sh")} release`;
   for (const artifact of [
     join(contentsDirectory, "MacOS", executableName),
     bundledDaemonExecutable,
@@ -446,7 +447,7 @@ try {
   }
   await $`codesign --verify --deep --strict --verbose=2 ${appBundle}`;
 
-  temporaryDirectory = await mkdtemp(join(tmpdir(), "waku-dmg-"));
+  temporaryDirectory = await mkdtemp(join(tmpdir(), "launcher-dmg-"));
   const stagingDirectory = join(temporaryDirectory, "root");
   mountDirectory = join(temporaryDirectory, "mount");
   await mkdir(stagingDirectory);
@@ -502,7 +503,7 @@ try {
       mountedContents,
       "Resources",
       "skills",
-      "waku-computer-use",
+      "launcher-computer-use",
       "SKILL.md",
     ),
     join(
@@ -630,7 +631,7 @@ try {
   await $`ditto ${zipPath} ${join(updatesDirectory, zipName)}`;
 
   // Release notes: this version's CHANGELOG.md section ships next to the
-  // archive as Waku-<version>.md; generate_appcast links it as the update's
+  // archive as Launcher-<version>.md; generate_appcast links it as the update's
   // release notes, which Sparkle renders in the prompt.
   const changelogFile = Bun.file(join(projectRoot, "CHANGELOG.md"));
   const notes = (await changelogFile.exists())
@@ -666,7 +667,7 @@ try {
     logStep("Uploading appcast.xml");
     await $`rclone copyto ${join(updatesDirectory, "appcast.xml")} ${`${r2Destination}/appcast.xml`} ${rcloneFlags} --header-upload ${"Cache-Control: public, max-age=300, must-revalidate"}`;
 
-    console.log(`\nWaku ${version} (build ${buildNumber}) is live:`);
+    console.log(`\nLauncher ${version} (build ${buildNumber}) is live:`);
     console.log(`  download : ${downloadUrlPrefix}${dmgName}`);
     console.log(`  update   : ${downloadUrlPrefix}${zipName}`);
     console.log(`  feed     : ${downloadUrlPrefix}appcast.xml`);

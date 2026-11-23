@@ -13,10 +13,10 @@ import type {
   ReviewDiffSource,
   ResponsePayload,
   SlashCommand,
-  WakuClient,
+  LauncherClient,
   WorkingTreeEntry,
   WorkspaceResult,
-} from '@waku/client';
+} from '@launcher/client';
 
 export type TaskState = Extract<ResponsePayload, { type: 'taskState' }>;
 export type DaemonDirectory = Extract<WorkspaceResult, { type: 'directory' }>;
@@ -83,12 +83,12 @@ export const daemonKeys = {
   ] as const,
 };
 
-export async function loadTaskState(client: WakuClient): Promise<TaskState> {
+export async function loadTaskState(client: LauncherClient): Promise<TaskState> {
   return expectResponse(await client.request({ type: 'loadTaskState' }), 'taskState');
 }
 
 export async function hydrateSession(
-  client: WakuClient,
+  client: LauncherClient,
   sessionId: string,
 ): Promise<AgentSession | null> {
   const response = expectResponse(
@@ -99,7 +99,7 @@ export async function hydrateSession(
 }
 
 export async function listProviderSessions(
-  client: WakuClient,
+  client: LauncherClient,
   provider: ProviderKind,
 ): Promise<ProviderSessionSummary[]> {
   return expectResponse(
@@ -109,7 +109,7 @@ export async function listProviderSessions(
 }
 
 export async function loadProviderSessionHistory(
-  client: WakuClient,
+  client: LauncherClient,
   summary: ProviderSessionSummary,
 ): Promise<ProviderSessionHistory> {
   return expectResponse(await client.request({
@@ -124,7 +124,7 @@ export function providerSessionKey(cursor: ProviderSessionSummary['cursor']): st
 }
 
 export async function attachDaemonSession(
-  client: WakuClient,
+  client: LauncherClient,
   sessionId: string,
 ): Promise<{ runtimeId: string; supportsSteer: boolean } | null> {
   const response = expectResponse(
@@ -136,7 +136,7 @@ export async function attachDaemonSession(
     : null;
 }
 
-export async function loadDaemonSettings(client: WakuClient): Promise<DaemonSettings> {
+export async function loadDaemonSettings(client: LauncherClient): Promise<DaemonSettings> {
   const response = expectResponse(await client.request({ type: 'getSettings' }), 'settings');
   return {
     ...response.settings,
@@ -145,7 +145,7 @@ export async function loadDaemonSettings(client: WakuClient): Promise<DaemonSett
 }
 
 export async function probeProvider(
-  client: WakuClient,
+  client: LauncherClient,
   provider: ProviderKind,
   settings: DaemonSettings,
   options: { discoverModels?: boolean; probeVersion?: boolean } = {},
@@ -164,7 +164,7 @@ export async function probeProvider(
 }
 
 export async function browseDaemonDirectory(
-  client: WakuClient,
+  client: LauncherClient,
   path: string | null,
 ): Promise<DaemonDirectory> {
   const response = expectResponse(
@@ -192,7 +192,7 @@ export function createProject(
 }
 
 export async function persistProject(
-  client: WakuClient,
+  client: LauncherClient,
   candidate: Project,
 ): Promise<{ project: Project; taskState: TaskState }> {
   const current = await loadTaskState(client);
@@ -211,7 +211,7 @@ export async function persistProject(
   return { project: candidate, taskState: { ...current, projects } };
 }
 
-export async function createProjectlessWorkspace(client: WakuClient): Promise<string> {
+export async function createProjectlessWorkspace(client: LauncherClient): Promise<string> {
   const response = expectResponse(
     await client.request({
       type: 'workspace',
@@ -226,7 +226,7 @@ export async function createProjectlessWorkspace(client: WakuClient): Promise<st
 }
 
 export async function materializeWorktree(
-  client: WakuClient,
+  client: LauncherClient,
   session: AgentSession,
   projectPath: string,
   prompt: string,
@@ -260,7 +260,7 @@ export async function materializeWorktree(
 }
 
 export async function loadComposerDrafts(
-  client: WakuClient,
+  client: LauncherClient,
 ): Promise<Extract<ResponsePayload, { type: 'composerDrafts' }>['drafts']> {
   const response = expectResponse(
     await client.request({ type: 'loadComposerDrafts' }),
@@ -270,7 +270,7 @@ export async function loadComposerDrafts(
 }
 
 export async function applyComposerDraftChanges(
-  client: WakuClient,
+  client: LauncherClient,
   changes: ComposerDraftChange[],
 ): Promise<void> {
   expectResponse(
@@ -280,7 +280,7 @@ export async function applyComposerDraftChanges(
 }
 
 export async function inspectBranches(
-  client: WakuClient,
+  client: LauncherClient,
   cwd: string,
 ): Promise<BranchSnapshot | null> {
   const response = expectResponse(
@@ -294,7 +294,7 @@ export async function inspectBranches(
 }
 
 export async function listWorkspaceTree(
-  client: WakuClient,
+  client: LauncherClient,
   root: string,
   expandedPaths: string[],
 ): Promise<WorkingTreeEntry[]> {
@@ -312,7 +312,7 @@ export async function listWorkspaceTree(
 }
 
 export async function discoverComposerCommands(
-  client: WakuClient,
+  client: LauncherClient,
   provider: ProviderKind,
   root: string,
   binaryOverride: string | null,
@@ -332,7 +332,7 @@ export async function discoverComposerCommands(
   return response.result.commands;
 }
 
-export async function listComposerFiles(client: WakuClient, root: string): Promise<FileEntry[]> {
+export async function listComposerFiles(client: LauncherClient, root: string): Promise<FileEntry[]> {
   const response = expectResponse(await client.request({
     type: 'workspace',
     operation: { type: 'listProjectFiles', root, cap: 50_000 },
@@ -344,7 +344,7 @@ export async function listComposerFiles(client: WakuClient, root: string): Promi
 }
 
 export async function readWorkspaceTextFile(
-  client: WakuClient,
+  client: LauncherClient,
   root: string,
   relativePath: string,
 ): Promise<string> {
@@ -362,7 +362,7 @@ export async function readWorkspaceTextFile(
 }
 
 export async function collectWorkspaceDiff(
-  client: WakuClient,
+  client: LauncherClient,
   cwd: string,
   source: ReviewDiffSource = 'uncommitted',
 ): Promise<ReviewDiffData> {
@@ -380,14 +380,14 @@ export async function collectWorkspaceDiff(
 }
 
 export async function removeDaemonSession(
-  client: WakuClient,
+  client: LauncherClient,
   sessionId: string,
 ): Promise<void> {
   expectResponse(await client.request({ type: 'removeSession' }, sessionId), 'ack');
 }
 
 export async function persistSession(
-  client: WakuClient,
+  client: LauncherClient,
   session: AgentSession,
 ): Promise<AgentSession> {
   const response = expectResponse(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { FileEntry, ReportedCommand, SlashCommand } from '@waku/client'
+import type { FileEntry, ReportedCommand, SlashCommand } from '@launcher/client'
 import {
   composerAutocompleteRows,
   detectComposerTrigger,
@@ -47,7 +47,7 @@ describe('composer autocomplete', () => {
     const discovered = [
       command('review', 'Project', 'Review changes', 'Review $ARGUMENTS'),
       command('deploy', 'Skill', 'Deploy the app', null),
-      command('resume', 'Waku', 'Resume a session', null),
+      command('resume', 'Launcher', 'Resume a session', null),
     ]
     const reported: ReportedCommand[] = [
       { name: 'review', description: 'Provider review' },

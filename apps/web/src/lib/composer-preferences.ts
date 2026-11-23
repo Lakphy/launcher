@@ -1,1 +1,1 @@
-export * from '@waku/client/composer-preferences'
+export * from '@launcher/client/composer-preferences'

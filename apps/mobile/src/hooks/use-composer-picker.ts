@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FileEntry, ProviderKind, ReportedCommand, SlashCommand } from '@waku/client';
-import { mergeComposerCommands, type ComposerAutocompleteRow, type ComposerTriggerKind } from '@waku/client/composer-autocomplete';
+import type { FileEntry, ProviderKind, ReportedCommand, SlashCommand } from '@launcher/client';
+import { mergeComposerCommands, type ComposerAutocompleteRow, type ComposerTriggerKind } from '@launcher/client/composer-autocomplete';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, type TextInputProps } from 'react-native';
 

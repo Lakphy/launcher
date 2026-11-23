@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSession } from "@waku/client";
+import type { AgentSession } from "@launcher/client";
 
 import {
   latestReviewTurnSource,

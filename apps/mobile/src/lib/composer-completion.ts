@@ -1,10 +1,10 @@
-import type { FileEntry, MessageAttachment, ProviderKind, SlashCommand } from '@waku/client';
+import type { FileEntry, MessageAttachment, ProviderKind, SlashCommand } from '@launcher/client';
 import {
   composerAutocompleteRows,
   expandedComposerSubmission,
   type ComposerAutocompleteRow,
   type ComposerTrigger,
-} from '@waku/client/composer-autocomplete';
+} from '@launcher/client/composer-autocomplete';
 
 export interface ComposerSelection {
   start: number;

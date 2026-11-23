@@ -7,14 +7,14 @@ import type {
   RuntimeMode,
   SlashCommand,
   ThreadGoal,
-} from '@waku/client';
+} from '@launcher/client';
 import {
   isFastModeToggleSubmission,
   isResumeSubmission,
   parseGoalSubmission,
   toggledFastServiceTier,
-} from '@waku/client/composer-autocomplete';
-import { fuzzyScore } from '@waku/client/fuzzy-search';
+} from '@launcher/client/composer-autocomplete';
+import { fuzzyScore } from '@launcher/client/fuzzy-search';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';

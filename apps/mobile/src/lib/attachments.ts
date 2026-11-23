@@ -2,8 +2,8 @@ import { queryOptions } from '@tanstack/react-query';
 import {
   MAX_WIRE_MESSAGE_BYTES,
   type MessageAttachment,
-  type WakuClient,
-} from '@waku/client';
+  type LauncherClient,
+} from '@launcher/client';
 
 /** Leave enough JSON/base64 headroom for the websocket envelope, while also
  * respecting the daemon's 32 MiB per-attachment limit. */
@@ -24,12 +24,12 @@ export interface LocalAttachmentFile {
 /** Shared by staged and sent attachments. Daemon paths belong to the host,
  * so even a phone on the same network must load bytes through its client. */
 export async function readAttachmentImage(
-  client: WakuClient,
+  client: LauncherClient,
   attachment: MessageAttachment,
 ): Promise<string> {
   const reference = attachment.blob_reference;
   if (!reference) throw new Error('This attachment has no daemon reference');
-  const command = reference.startsWith('waku-blob:')
+  const command = reference.startsWith('launcher-blob:')
     ? ({ type: 'readBlob', reference } as const)
     : ({ type: 'readAttachment', reference, path: attachment.path } as const);
   const response = await client.request(command);
@@ -40,7 +40,7 @@ export async function readAttachmentImage(
 }
 
 export function attachmentImageQuery(
-  client: WakuClient | null,
+  client: LauncherClient | null,
   profile: { id: string; address: string } | null,
   attachment: MessageAttachment,
   connected: boolean,
@@ -51,7 +51,7 @@ export function attachmentImageQuery(
       profile?.address, attachment.blob_reference, attachment.path, attachment.name,
     ] as const,
     queryFn: () => {
-      if (!client) throw new Error('Waku daemon is disconnected');
+      if (!client) throw new Error('Launcher daemon is disconnected');
       return readAttachmentImage(client, attachment);
     },
     enabled: connected && Boolean(
@@ -66,7 +66,7 @@ export function attachmentImageQuery(
 }
 
 export async function importLocalAttachment(
-  client: WakuClient,
+  client: LauncherClient,
   local: LocalAttachmentFile,
 ): Promise<MessageAttachment> {
   if (local.size != null && local.size > MAX_ATTACHMENT_BYTES) {

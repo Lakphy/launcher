@@ -54,7 +54,7 @@ enum ProjectPickerAction {
     NoProject,
 }
 
-impl Waku {
+impl Launcher {
     /// The menu handle for `site`'s picker. Opening resets the filter and the
     /// keyboard cursor and hands focus to the field; closing returns focus to
     /// the composer, as the branch picker does.
@@ -306,7 +306,7 @@ impl Waku {
                             return;
                         };
                         // Close before applying: the toggle observer updates
-                        // `Waku`, so it cannot run inside the update below.
+                        // `Launcher`, so it cannot run inside the update below.
                         confirm_popover.close(window, cx);
                         window.refresh();
                         let _ = confirm_weak.update(cx, |this, cx| {
@@ -525,7 +525,7 @@ mod tests {
             project("crow-companion"),
             project("speech-to-subtitle"),
             project("crow"),
-            project("waku-crow-sync"),
+            project("launcher-crow-sync"),
         ];
         let mut matcher = Matcher::new(nucleo_matcher::Config::DEFAULT);
         let entries = visible_project_entries(&projects, None, "  CROW ", &mut matcher);
@@ -533,7 +533,7 @@ mod tests {
         // namesakes, and the non-matching project is gone.
         assert_eq!(
             names(&entries),
-            vec!["crow", "crow-companion", "waku-crow-sync"]
+            vec!["crow", "crow-companion", "launcher-crow-sync"]
         );
 
         let entries = visible_project_entries(&projects, None, "sts", &mut matcher);

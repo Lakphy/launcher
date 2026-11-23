@@ -9,7 +9,7 @@ import type {
   ProviderProbe,
   SequencedEvent,
   UserInputAnswer,
-} from '@waku/client'
+} from '@launcher/client'
 import {
   createContext,
   useCallback,
@@ -366,7 +366,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         }))
         checkpoint = {
           turn_count: turn.turn_count,
-          git_ref: `refs/waku/session-${saved.id}-turn-${turn.turn_count}`,
+          git_ref: `refs/launcher/session-${saved.id}-turn-${turn.turn_count}`,
           status: 'error',
           files: [],
           additions: 0,

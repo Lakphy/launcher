@@ -3,9 +3,9 @@ import * as SecureStore from 'expo-secure-store';
 
 import { parseDaemonProfiles, type DaemonProfile } from './daemon-profile';
 
-const PROFILES_KEY = 'waku.mobile.daemons.v1';
-const ACTIVE_KEY = 'waku.mobile.active-daemon.v1';
-const TOKEN_PREFIX = 'waku.mobile.daemon-token.v1.';
+const PROFILES_KEY = 'launcher.mobile.daemons.v1';
+const ACTIVE_KEY = 'launcher.mobile.active-daemon.v1';
+const TOKEN_PREFIX = 'launcher.mobile.daemon-token.v1.';
 
 export async function readDaemonProfiles(): Promise<DaemonProfile[]> {
   const serialized = await AsyncStorage.getItem(PROFILES_KEY);

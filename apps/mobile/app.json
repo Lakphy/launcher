@@ -1,25 +1,25 @@
 {
   "expo": {
-    "name": "Waku",
-    "slug": "waku-mobile",
+    "name": "Launcher",
+    "slug": "launcher-mobile",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "waku",
+    "scheme": "launcher",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/images/icon.png",
-      "bundleIdentifier": "sh.waku.mobile",
+      "bundleIdentifier": "dev.lakphy.launcher.mobile",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Waku connects directly to daemon hosts you add on your local or private network.",
+        "NSLocalNetworkUsageDescription": "Launcher connects directly to daemon hosts you add on your local or private network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
       }
     },
     "android": {
-      "package": "sh.waku.mobile",
+      "package": "dev.lakphy.launcher.mobile",
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -57,8 +57,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Waku to choose photos to attach to tasks.",
-          "cameraPermission": "Allow Waku to take photos to attach to tasks.",
+          "photosPermission": "Allow Launcher to choose photos to attach to tasks.",
+          "cameraPermission": "Allow Launcher to take photos to attach to tasks.",
           "microphonePermission": false
         }
       ],

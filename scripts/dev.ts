@@ -7,15 +7,15 @@ import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const isMacOS = process.platform === "darwin";
-const appName = "Waku Debug";
+const appName = "Launcher Debug";
 const targetDir = resolve(root, process.env.CARGO_TARGET_DIR || "target");
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const appPath = isMacOS
-  ? join(targetDir, "debug/Waku Debug.app")
-  : join(targetDir, `debug/waku${executableSuffix}`);
+  ? join(targetDir, "debug/Launcher Debug.app")
+  : join(targetDir, `debug/launcher${executableSuffix}`);
 const daemonPath = join(
   targetDir,
-  `debug/waku-debug-daemon${executableSuffix}`,
+  `debug/launcher-debug-daemon${executableSuffix}`,
 );
 const watchedDirectories = [
   "src",
@@ -50,12 +50,12 @@ let daemonChangeRevision = 0;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 const watchers: FSWatcher[] = [];
 const hyprlandRuleKeys = [
-  "waku_dev_workspace_rule",
-  "waku_dev_background_rule",
+  "launcher_dev_workspace_rule",
+  "launcher_dev_background_rule",
 ] as const;
-const hyprlandSubscriptionKey = "waku_dev_window_open_subscription";
-const hyprlandLaunchArmedKey = "waku_dev_launch_armed";
-const hyprlandOwnerKey = "waku_dev_owner";
+const hyprlandSubscriptionKey = "launcher_dev_window_open_subscription";
+const hyprlandLaunchArmedKey = "launcher_dev_launch_armed";
+const hyprlandOwnerKey = "launcher_dev_owner";
 let hyprlandRulesInstalled = false;
 let hyprlandWarningShown = false;
 
@@ -170,15 +170,15 @@ async function prepareHyprlandLaunch(): Promise<void> {
 
     if _G[workspace_key] == nil then
       _G[workspace_key] = hl.window_rule({
-        name = "waku-dev-workspace",
-        match = { initial_class = "sh[.]waku[.]dev" },
+        name = "launcher-dev-workspace",
+        match = { initial_class = "sh[.]launcher[.]dev" },
         workspace = ${luaString(`${hyprlandWorkspace.selector} silent`)},
       })
     end
     if _G[background_key] == nil then
       _G[background_key] = hl.window_rule({
-        name = "waku-dev-background",
-        match = { initial_class = "sh[.]waku[.]dev" },
+        name = "launcher-dev-background",
+        match = { initial_class = "sh[.]launcher[.]dev" },
         no_initial_focus = true,
         suppress_event = "activate activatefocus",
       })
@@ -190,7 +190,7 @@ async function prepareHyprlandLaunch(): Promise<void> {
     if _G[subscription_key] == nil then
       local anchor_selector = ${luaString(anchorSelector)}
       _G[subscription_key] = hl.on("window.open", function(window)
-        if not _G[armed_key] or window.initial_class ~= "sh.waku.dev" then
+        if not _G[armed_key] or window.initial_class ~= "dev.lakphy.launcher.dev" then
           return
         end
         _G[armed_key] = false
@@ -214,7 +214,7 @@ async function prepareHyprlandLaunch(): Promise<void> {
           return
         end
 
-        -- Swapping with each preceding singleton column rotates Waku into the
+        -- Swapping with each preceding singleton column rotates Launcher into the
         -- desired slot while preserving the order of all intervening columns.
         -- A stacked or custom-width column cannot be rotated through this API
         -- without changing its membership or sizing, so leave it untouched.
@@ -265,7 +265,7 @@ async function prepareHyprlandLaunch(): Promise<void> {
       const detail =
         result.stderr.toString().trim() || result.stdout.toString().trim();
       console.warn(
-        `[waku-dev] Could not pin Waku to its Hyprland workspace${detail ? `: ${detail}` : "."}`,
+        `[launcher-dev] Could not pin Launcher to its Hyprland workspace${detail ? `: ${detail}` : "."}`,
       );
       hyprlandWarningShown = true;
     }
@@ -274,7 +274,7 @@ async function prepareHyprlandLaunch(): Promise<void> {
 
   if (!hyprlandRulesInstalled) {
     console.log(
-      `[waku-dev] Keeping Waku beside the watcher on Hyprland workspace ${hyprlandWorkspace.name}.`,
+      `[launcher-dev] Keeping Launcher beside the watcher on Hyprland workspace ${hyprlandWorkspace.name}.`,
     );
   }
   hyprlandRulesInstalled = true;
@@ -309,18 +309,18 @@ async function build(target: BuildTarget): Promise<boolean> {
     return buildDaemon();
   }
 
-  console.log(`[waku-dev] Building ${isMacOS ? "app bundle" : "app"}...`);
+  console.log(`[launcher-dev] Building ${isMacOS ? "app bundle" : "app"}...`);
   if (!(await buildDaemon())) {
     console.error(
-      "[waku-dev] Daemon build failed; keeping the current app open.",
+      "[launcher-dev] Daemon build failed; keeping the current app open.",
     );
     return false;
   }
   const result = isMacOS
     ? await $`${join(root, "scripts/bundle.sh")} debug`.nothrow()
-    : await $`cargo build --package waku --bin waku --bin waku_js_repl --package waku-computer-use --bin waku_computer_use`.nothrow();
+    : await $`cargo build --package launcher --bin launcher --bin launcher_js_repl --package launcher-computer-use --bin launcher_computer_use`.nothrow();
   if (result.exitCode !== 0) {
-    console.error("[waku-dev] Build failed; keeping the current app open.");
+    console.error("[launcher-dev] Build failed; keeping the current app open.");
     return false;
   }
   if (!isMacOS) {
@@ -331,7 +331,7 @@ async function build(target: BuildTarget): Promise<boolean> {
         "debug",
       );
     } catch (error) {
-      console.error("[waku-dev] Computer Use SDK packaging failed:", error);
+      console.error("[launcher-dev] Computer Use SDK packaging failed:", error);
       return false;
     }
   }
@@ -339,12 +339,12 @@ async function build(target: BuildTarget): Promise<boolean> {
 }
 
 async function buildDaemon(): Promise<boolean> {
-  console.log("[waku-dev] Building daemon...");
+  console.log("[launcher-dev] Building daemon...");
   const result =
-    await $`cargo build --package waku-daemon --features dev-binary --bin waku-debug-daemon`.nothrow();
+    await $`cargo build --package launcher-daemon --features dev-binary --bin launcher-debug-daemon`.nothrow();
   if (result.exitCode !== 0) {
     console.error(
-      "[waku-dev] Daemon build failed; keeping the current daemon running.",
+      "[launcher-dev] Daemon build failed; keeping the current daemon running.",
     );
     return false;
   }
@@ -365,11 +365,11 @@ async function stopApp(): Promise<void> {
 }
 
 function launchApp(): ReturnType<typeof Bun.spawn> {
-  console.log(`[waku-dev] Launching ${appPath}`);
+  console.log(`[launcher-dev] Launching ${appPath}`);
   const command = isMacOS ? ["open", "-n", "-W", appPath] : [appPath];
   const launchedApp = Bun.spawn(command, {
     cwd: root,
-    env: { ...process.env, WAKU_DAEMON_PATH: daemonPath },
+    env: { ...process.env, LAUNCHER_DAEMON_PATH: daemonPath },
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -380,7 +380,7 @@ function launchApp(): ReturnType<typeof Bun.spawn> {
     closeWatchers();
     clearRebuildTimer();
     await releaseHyprlandRules();
-    console.log("[waku-dev] App exited; stopping the watcher.");
+    console.log("[launcher-dev] App exited; stopping the watcher.");
     process.exitCode = exitCode;
   });
   return launchedApp;
@@ -397,7 +397,7 @@ function closeWatchers(): void {
 }
 
 function reportWatcherError(error: Error): void {
-  console.error("[waku-dev] File watcher failed:", error);
+  console.error("[launcher-dev] File watcher failed:", error);
   process.exitCode = 1;
   void cleanup();
 }
@@ -416,8 +416,8 @@ function targetForChange(
   if (directory !== "crates" || filename === null) return "app";
   const relativePath = filename.toString().replaceAll("\\", "/");
   if (
-    relativePath.startsWith("waku-daemon/") ||
-    relativePath.startsWith("waku-core/")
+    relativePath.startsWith("launcher-daemon/") ||
+    relativePath.startsWith("launcher-core/")
   ) {
     return "daemon";
   }
@@ -474,7 +474,7 @@ async function drainBuildQueue(): Promise<void> {
       if (target === "daemon") {
         if (daemonChangeRevision === buildDaemonRevision) {
           console.log(
-            "[waku-dev] Daemon rebuilt; Waku will swap the process without relaunching.",
+            "[launcher-dev] Daemon rebuilt; Launcher will swap the process without relaunching.",
           );
         }
         continue;
@@ -485,7 +485,7 @@ async function drainBuildQueue(): Promise<void> {
       // up the independently rebuilt daemon.
       if (appChangeRevision !== buildAppRevision) {
         console.log(
-          "[waku-dev] More changes arrived during the build; waiting to rebuild.",
+          "[launcher-dev] More changes arrived during the build; waiting to rebuild.",
         );
         continue;
       }
@@ -503,7 +503,7 @@ async function drainBuildQueue(): Promise<void> {
 async function cleanup(): Promise<void> {
   if (stopping) return;
   stopping = true;
-  console.log("[waku-dev] Stopping watcher and app...");
+  console.log("[launcher-dev] Stopping watcher and app...");
   closeWatchers();
   clearRebuildTimer();
   await stopApp();
@@ -529,11 +529,11 @@ if (appChangeRevision === initialAppRevision) {
   if (!stopping) app = launchApp();
 } else {
   console.log(
-    "[waku-dev] Changes arrived during the initial build; waiting to rebuild.",
+    "[launcher-dev] Changes arrived during the initial build; waiting to rebuild.",
   );
   if (queuedBuild !== undefined) void drainBuildQueue();
 }
 
 console.log(
-  "[waku-dev] Watching for source changes. Daemon-only edits hot-reload without relaunching Waku.",
+  "[launcher-dev] Watching for source changes. Daemon-only edits hot-reload without relaunching Launcher.",
 );

@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { FileEntry, SlashCommand } from '@waku/client';
+import type { FileEntry, SlashCommand } from '@launcher/client';
 import {
   composerAutocompleteRows,
   detectComposerTrigger,
   replaceComposerTrigger,
-} from '@waku/client/composer-autocomplete';
+} from '@launcher/client/composer-autocomplete';
 
 import { composerPickerSearchState, insertComposerItem, composerProviderPrompt, searchComposerRows, selectionAfterComposerEdit } from './composer-completion';
 import { beginTurn, createSession, queueSubmission } from './mobile-runtime';

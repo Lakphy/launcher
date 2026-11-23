@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { MessageAttachment } from '@waku/client';
+import type { MessageAttachment } from '@launcher/client';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Keyboard, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

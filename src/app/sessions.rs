@@ -13,7 +13,7 @@ fn new_task_runtime_mode(current: Option<&AgentSession>, remembered: RuntimeMode
         .unwrap_or(remembered)
 }
 
-impl Waku {
+impl Launcher {
     pub(crate) fn open_task_from_notification(&mut self, session_id: Uuid, cx: &mut Context<Self>) {
         self.select_session(session_id, cx);
     }
@@ -109,11 +109,11 @@ impl Waku {
             return;
         }
         let daemon = self.daemon.clone();
-        cx.spawn(async move |waku, cx| {
+        cx.spawn(async move |launcher, cx| {
             let result = cx
                 .background_executor()
                 .spawn(async move {
-                    match waku_client::persistence::hydrate_session(&daemon, session_id)? {
+                    match launcher_client::persistence::hydrate_session(&daemon, session_id)? {
                         Some(session) => Ok(session),
                         None => {
                             anyhow::bail!("the task no longer exists")
@@ -121,11 +121,11 @@ impl Waku {
                     }
                 })
                 .await;
-            let _ = waku.update(cx, |waku, cx| {
-                waku.session_hydrations.remove(&session_id);
+            let _ = launcher.update(cx, |launcher, cx| {
+                launcher.session_hydrations.remove(&session_id);
                 match result {
                     Ok(session) => {
-                        let replaced = if let Some(existing) = waku
+                        let replaced = if let Some(existing) = launcher
                             .state
                             .sessions
                             .iter_mut()
@@ -136,28 +136,28 @@ impl Waku {
                         } else {
                             false
                         };
-                        let pending = waku
+                        let pending = launcher
                             .pending_session_activation
                             .filter(|pending| pending.session_id == session_id);
                         if pending.is_some() {
-                            waku.pending_session_activation = None;
+                            launcher.pending_session_activation = None;
                         }
                         if replaced && let Some(pending) = pending {
-                            waku.finish_session_activation(session_id, pending.transition, cx);
-                        } else if waku.state.selected_session == Some(session_id) {
-                            waku.reset_visible_state();
-                            waku.reset_transcript_rows(waku.transcript_row_count());
-                            waku.refresh_composer_sources(cx);
+                            launcher.finish_session_activation(session_id, pending.transition, cx);
+                        } else if launcher.state.selected_session == Some(session_id) {
+                            launcher.reset_visible_state();
+                            launcher.reset_transcript_rows(launcher.transcript_row_count());
+                            launcher.refresh_composer_sources(cx);
                         }
                     }
                     Err(error) => {
-                        if waku
+                        if launcher
                             .pending_session_activation
                             .is_some_and(|pending| pending.session_id == session_id)
                         {
-                            waku.pending_session_activation = None;
+                            launcher.pending_session_activation = None;
                         }
-                        waku.show_toast(tr!("errors.open_session", error = error));
+                        launcher.show_toast(tr!("errors.open_session", error = error));
                     }
                 }
                 cx.notify();
@@ -359,13 +359,14 @@ impl Waku {
             }
         }
         if let Some(project_path) = project_path {
-            let workspace = waku_client::WorkspaceClient::new(self.daemon.client());
+            let workspace = launcher_client::WorkspaceClient::new(self.daemon.client());
             cx.background_executor()
                 .spawn(async move {
-                    let _ = workspace.request(waku_client::WorkspaceOperation::DeleteSessionRefs {
-                        cwd: project_path,
-                        session_id,
-                    });
+                    let _ =
+                        workspace.request(launcher_client::WorkspaceOperation::DeleteSessionRefs {
+                            cwd: project_path,
+                            session_id,
+                        });
                 })
                 .detach();
         }
@@ -564,7 +565,7 @@ impl Waku {
     /// as on screen and keeps its full width here: the slide narrows the
     /// container that clips it, so nothing inside reflows on the way out.
     /// What the panel actually occupies this frame is
-    /// [`Waku::sidebar_rendered_width`] / [`Waku::right_panel_rendered_width`].
+    /// [`Launcher::sidebar_rendered_width`] / [`Launcher::right_panel_rendered_width`].
     pub(super) fn effective_panel_widths(&self, window: &Window) -> (f32, f32) {
         fitted_panel_widths(
             f32::from(window.viewport_size().width),
@@ -1237,11 +1238,11 @@ impl Waku {
         if let Some(previous_kinds) = previous_kinds.as_deref() {
             self.splice_active_transcript_rows_after_visibility_change(previous_kinds);
         }
-        // A provider runtime owns its Waku JavaScript REPL and Computer Use
+        // A provider runtime owns its Launcher JavaScript REPL and Computer Use
         // descendants. Normally Stop closes that process tree and the next
         // prompt resumes the same provider thread with a fresh runtime. A
         // detached process or subagent is the exception: its provider must
-        // remain resident so Waku can keep observing and stopping it.
+        // remain resident so Launcher can keep observing and stopping it.
         if retain_runtime && keep_runtime {
             if let Some(runtime) = runtime.take() {
                 self.runtimes.insert(session_id, runtime);
@@ -1630,31 +1631,31 @@ impl Waku {
             return;
         }
 
-        let workspace = waku_client::WorkspaceClient::new(self.daemon.client());
-        cx.spawn(async move |waku, cx| {
+        let workspace = launcher_client::WorkspaceClient::new(self.daemon.client());
+        cx.spawn(async move |launcher, cx| {
             let result = cx
                 .background_executor()
                 .spawn(async move {
                     match workspace.request(
-                        waku_client::WorkspaceOperation::CreateProjectlessWorkspace {
+                        launcher_client::WorkspaceOperation::CreateProjectlessWorkspace {
                             prompt: None,
                         },
                     )? {
-                        waku_client::WorkspaceResult::ProjectlessWorkspace { cwd } => Ok(cwd),
+                        launcher_client::WorkspaceResult::ProjectlessWorkspace { cwd } => Ok(cwd),
                         _ => anyhow::bail!("the daemon returned an invalid projectless response"),
                     }
                 })
                 .await;
-            let _ = waku.update(cx, |waku, cx| match result {
+            let _ = launcher.update(cx, |launcher, cx| match result {
                 Ok(cwd) => {
                     let mut project = Project::from_path(cwd);
                     project.name = Project::PROJECTLESS_NAME.to_owned();
                     let project_id = project.id;
-                    waku.state.projects.push(project);
-                    waku.create_session_for(project_id, waku.state.last_provider, cx);
+                    launcher.state.projects.push(project);
+                    launcher.create_session_for(project_id, launcher.state.last_provider, cx);
                 }
                 Err(error) => {
-                    waku.show_toast(tr!("errors.create_projectless_task", error = error));
+                    launcher.show_toast(tr!("errors.create_projectless_task", error = error));
                     cx.notify();
                 }
             });

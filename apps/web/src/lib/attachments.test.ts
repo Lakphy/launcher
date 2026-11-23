@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { WakuClient } from '@waku/client'
+import type { LauncherClient } from '@launcher/client'
 import { importDaemonPathAttachment } from './attachments'
 
 describe('importDaemonPathAttachment', () => {
@@ -11,14 +11,14 @@ describe('importDaemonPathAttachment', () => {
         return {
           type: 'attachmentStored',
           attachment: {
-            reference: 'waku-attachment:one',
-            path: '/home/me/.waku/attachments/one/logo.png',
+            reference: 'launcher-attachment:one',
+            path: '/home/me/.launcher/attachments/one/logo.png',
             name: 'logo.png',
             isDir: false,
           },
         }
       },
-    } as unknown as WakuClient
+    } as unknown as LauncherClient
 
     const attachment = await importDaemonPathAttachment(client, '/Users/me/Pictures/logo.png')
 
@@ -27,12 +27,12 @@ describe('importDaemonPathAttachment', () => {
       path: '/Users/me/Pictures/logo.png',
     })
     expect(attachment).toEqual({
-      path: '/home/me/.waku/attachments/one/logo.png',
+      path: '/home/me/.launcher/attachments/one/logo.png',
       mention: '/Users/me/Pictures/logo.png',
       name: 'logo.png',
       is_dir: false,
       is_image: true,
-      blob_reference: 'waku-attachment:one',
+      blob_reference: 'launcher-attachment:one',
     })
   })
 })

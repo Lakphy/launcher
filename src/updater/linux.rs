@@ -1,7 +1,7 @@
-//! Signed, rollback-safe updates for Waku's managed Linux tarball install.
+//! Signed, rollback-safe updates for Launcher's managed Linux tarball install.
 //!
 //! Checks, downloads, signature verification, and extraction all run on a
-//! worker thread. Once an archive is fully staged, `waku-updater` validates
+//! worker thread. Once an archive is fully staged, `launcher-updater` validates
 //! both prefixes and acknowledges the handoff before the UI begins a normal
 //! quit. The helper then swaps the directories and only removes the previous
 //! build after the replacement opens its main window.
@@ -23,11 +23,11 @@ use flate2::read::GzDecoder;
 use super::feed::{self, AppcastItem};
 use super::{UpdateStatus, UpdaterEvent};
 
-const PUBLIC_ED_KEY: &str = env!("WAKU_SPARKLE_PUBLIC_ED_KEY");
-const MANAGED_MARKER: &str = "share/waku/self-update-v1";
-const MANAGED_MARKER_CONTENTS: &str = "waku-self-update-v1\n";
-const HELPER_EXECUTABLE: &str = "waku-updater";
-const RELAUNCH_READY_ENV: &str = "WAKU_UPDATE_READY_FILE";
+const PUBLIC_ED_KEY: &str = env!("LAUNCHER_SPARKLE_PUBLIC_ED_KEY");
+const MANAGED_MARKER: &str = "share/launcher/self-update-v1";
+const MANAGED_MARKER_CONTENTS: &str = "launcher-self-update-v1\n";
+const HELPER_EXECUTABLE: &str = "launcher-updater";
+const RELAUNCH_READY_ENV: &str = "LAUNCHER_UPDATE_READY_FILE";
 const MAX_FEED_BYTES: u64 = 1024 * 1024;
 const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 1024 * 1024 * 1024;
@@ -36,11 +36,9 @@ const MAX_ERROR_BYTES: u64 = 16 * 1024;
 
 static TEMPORARY_NONCE: AtomicU64 = AtomicU64::new(0);
 
-#[cfg(target_arch = "aarch64")]
-const FEED_URL: Option<&str> = Some("https://releases.waku.sh/appcast-linux-aarch64.xml");
-#[cfg(target_arch = "x86_64")]
-const FEED_URL: Option<&str> = Some("https://releases.waku.sh/appcast-linux-x86_64.xml");
-#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+/// No update feed is compiled in. Launcher must not download archives from
+/// Waku's release host. Point this at an appcast signed with Launcher's own
+/// key before shipping updates, and keep [`validate_download_url`] in step.
 const FEED_URL: Option<&str> = None;
 
 #[derive(Clone, Debug)]
@@ -61,7 +59,7 @@ impl InstallLayout {
         }
 
         let executable = std::env::current_exe().ok()?.canonicalize().ok()?;
-        if executable.file_name()? != "waku" || executable.parent()?.file_name()? != "bin" {
+        if executable.file_name()? != "launcher" || executable.parent()?.file_name()? != "bin" {
             return None;
         }
         let prefix = executable.parent()?.parent()?.to_path_buf();
@@ -150,13 +148,13 @@ pub struct Updater {
 
 impl Updater {
     pub fn init() -> Option<Self> {
-        let forced = std::env::var_os("WAKU_FORCE_UPDATER").is_some_and(|value| value == "1");
+        let forced = std::env::var_os("LAUNCHER_FORCE_UPDATER").is_some_and(|value| value == "1");
         if cfg!(debug_assertions) && !forced {
             return None;
         }
         FEED_URL?;
         if verifying_key().is_none() {
-            eprintln!("Waku updater: SUPublicEDKey is not a valid ed25519 key");
+            eprintln!("Launcher updater: SUPublicEDKey is not a valid ed25519 key");
             return None;
         }
 
@@ -223,7 +221,7 @@ impl Updater {
             let _ = publish_events.try_send(UpdaterEvent::StatusChanged(next));
         };
         let spawned = std::thread::Builder::new()
-            .name("waku-updater-check".into())
+            .name("launcher-updater-check".into())
             .spawn(move || {
                 let outcome = fetch_and_stage(&layout);
                 let report = explicit_check.load(Ordering::Relaxed);
@@ -245,7 +243,7 @@ impl Updater {
                         if report {
                             let _ = events.try_send(UpdaterEvent::Failed(error.to_string()));
                         } else {
-                            eprintln!("Waku updater: {error:#}");
+                            eprintln!("Launcher updater: {error:#}");
                         }
                     }
                 }
@@ -274,7 +272,7 @@ impl Updater {
         let status = self.status.clone();
         let events = self.events.clone();
         if std::thread::Builder::new()
-            .name("waku-updater-handoff".into())
+            .name("launcher-updater-handoff".into())
             .spawn(move || {
                 let Ok((mut child, update)) = handoff_rx.recv() else {
                     return;
@@ -361,7 +359,7 @@ impl Updater {
         }
         let path = self.preference_path.clone();
         let _ = std::thread::Builder::new()
-            .name("waku-updater-preference".into())
+            .name("launcher-updater-preference".into())
             .spawn(move || write_automatic_preference(&path, enabled));
         if enabled {
             self.start_check(false);
@@ -440,7 +438,7 @@ fn verifying_key() -> Option<VerifyingKey> {
 fn extract_release_archive(path: &Path, destination: &Path, version: &str) -> anyhow::Result<()> {
     let triple =
         target_triple().ok_or_else(|| anyhow::anyhow!("unsupported Linux architecture"))?;
-    let expected_root = format!("waku-{version}-{triple}");
+    let expected_root = format!("launcher-{version}-{triple}");
     let decoder = GzDecoder::new(File::open(path)?);
     let mut archive = tar::Archive::new(decoder);
     let mut seen = HashSet::new();
@@ -510,9 +508,9 @@ fn validate_packaged_layout(prefix: &Path) -> anyhow::Result<()> {
     anyhow::ensure!(
         marker_metadata.file_type().is_file()
             && fs::read_to_string(&marker).ok().as_deref() == Some(MANAGED_MARKER_CONTENTS),
-        "the install is not marked as a Waku-managed tarball"
+        "the install is not marked as a Launcher-managed tarball"
     );
-    for executable in ["waku", "waku-daemon", HELPER_EXECUTABLE] {
+    for executable in ["launcher", "launcher-daemon", HELPER_EXECUTABLE] {
         let path = prefix.join("bin").join(executable);
         let metadata = fs::symlink_metadata(&path)?;
         anyhow::ensure!(
@@ -537,12 +535,14 @@ fn validate_release_version(version: &str) -> anyhow::Result<()> {
 
 fn validate_download_url(value: &str) -> anyhow::Result<()> {
     let url = url::Url::parse(value)?;
+    let path = url.path();
     anyhow::ensure!(
         url.scheme() == "https"
-            && url.host_str() == Some("releases.waku.sh")
+            && url.host_str() == Some("github.com")
+            && path.starts_with("/Lakphy/launcher/")
             && url.username().is_empty()
             && url.password().is_none(),
-        "the update feed points outside releases.waku.sh"
+        "the update feed points outside https://github.com/Lakphy/launcher/"
     );
     Ok(())
 }
@@ -580,7 +580,7 @@ impl TemporaryFile {
         for _ in 0..100 {
             let nonce = TEMPORARY_NONCE.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "waku-update-feed-{}-{nonce}.xml",
+                "launcher-update-feed-{}-{nonce}.xml",
                 std::process::id()
             ));
             match OpenOptions::new()
@@ -688,7 +688,7 @@ fn concise_stderr(bytes: &[u8]) -> String {
 fn preference_path() -> Option<PathBuf> {
     Some(
         dirs::data_local_dir()?
-            .join(waku_protocol::identity::DATA_DIRECTORY_NAME)
+            .join(launcher_protocol::identity::DATA_DIRECTORY_NAME)
             .join("updater.json"),
     )
 }
@@ -779,7 +779,7 @@ mod tests {
 
     fn temporary_directory(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "waku-linux-updater-{label}-{}-{}",
+            "launcher-linux-updater-{label}-{}-{}",
             std::process::id(),
             TEMPORARY_NONCE.fetch_add(1, Ordering::Relaxed)
         ));
@@ -807,16 +807,16 @@ mod tests {
         let output = directory.join("output");
         fs::create_dir(&output).unwrap();
         let triple = target_triple().unwrap();
-        let root = format!("waku-9.8.7-{triple}");
+        let root = format!("launcher-9.8.7-{triple}");
         let encoder = flate2::write::GzEncoder::new(
             File::create(&archive_path).unwrap(),
             flate2::Compression::default(),
         );
         let mut archive = tar::Builder::new(encoder);
         for (relative, contents, mode) in [
-            ("bin/waku", b"app".as_slice(), 0o755),
-            ("bin/waku-daemon", b"daemon".as_slice(), 0o755),
-            ("bin/waku-updater", b"helper".as_slice(), 0o755),
+            ("bin/launcher", b"app".as_slice(), 0o755),
+            ("bin/launcher-daemon", b"daemon".as_slice(), 0o755),
+            ("bin/launcher-updater", b"helper".as_slice(), 0o755),
             (MANAGED_MARKER, MANAGED_MARKER_CONTENTS.as_bytes(), 0o644),
         ] {
             let mut header = tar::Header::new_gnu();
@@ -831,7 +831,7 @@ mod tests {
 
         extract_release_archive(&archive_path, &output, "9.8.7").unwrap();
         validate_packaged_layout(&output).unwrap();
-        assert_eq!(fs::read(output.join("bin/waku")).unwrap(), b"app");
+        assert_eq!(fs::read(output.join("bin/launcher")).unwrap(), b"app");
 
         fs::remove_dir_all(directory).unwrap();
     }

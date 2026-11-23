@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 
-export const WAKU_DOCUMENT_TITLE = 'Waku Web'
+export const LAUNCHER_DOCUMENT_TITLE = 'Launcher Web'
 
 export function formatDocumentTitle(section?: string | null): string {
   const normalized = section?.trim()
-  if (!normalized || normalized === WAKU_DOCUMENT_TITLE) return WAKU_DOCUMENT_TITLE
-  return `${normalized} — ${WAKU_DOCUMENT_TITLE}`
+  if (!normalized || normalized === LAUNCHER_DOCUMENT_TITLE) return LAUNCHER_DOCUMENT_TITLE
+  return `${normalized} — ${LAUNCHER_DOCUMENT_TITLE}`
 }
 
 export function useDocumentTitle(section?: string | null) {

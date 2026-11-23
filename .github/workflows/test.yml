@@ -66,7 +66,7 @@ jobs:
 
       - name: Verify in-process Cua SDK and REPL lifecycle
         run: |
-          cargo build --locked --package waku --bin waku_js_repl --package waku-computer-use --bin waku_computer_use
+          cargo build --locked --package launcher --bin launcher_js_repl --package launcher-computer-use --bin launcher_computer_use
           bun scripts/cua-driver.ts bundle target/debug target/debug/resources debug
           bun scripts/test-computer-use.ts
 
@@ -80,5 +80,5 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           bun run protocol:check
-          bun run --filter @waku/client check
-          bun run --filter @waku/client test
+          bun run --filter @launcher/client check
+          bun run --filter @launcher/client test
