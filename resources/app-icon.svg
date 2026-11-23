@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 256 256">
+  <title>Launcher</title>
+  <desc>Three ivory blades converge around the center of a solid blue-gray plate.</desc>
+  <defs>
+    <path id="blade" d="M132 69C154 70 176 83 185 103C188 110 181 116 175 112C153 98 132 103 119 116C114 121 105 117 105 110V93C105 78 116 68 132 69Z"/>
+  </defs>
+  <!-- Legacy ICNS supplies its own silhouette and transparent Dock margin. -->
+  <path fill="#303B51" d="M81 25H175C212.5 25 231 43.5 231 81V175C231 212.5 212.5 231 175 231H81C43.5 231 25 212.5 25 175V81C25 43.5 43.5 25 81 25Z"/>
+  <g fill="#FAF8F1">
+    <use href="#blade"/>
+    <use href="#blade" transform="rotate(120 128 128)"/>
+    <use href="#blade" transform="rotate(240 128 128)"/>
+  </g>
+</svg>
