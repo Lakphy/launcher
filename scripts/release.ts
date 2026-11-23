@@ -29,15 +29,12 @@ Usage:
   bun run release [options]
 
 The default run builds a signed, notarized DMG, packages the Sparkle update
-archive, regenerates the signed appcast (with binary deltas against recent
-releases), and uploads everything to Cloudflare R2. Set
-LAUNCHER_DOWNLOAD_URL_PREFIX to a host you control. Do not publish to
-releases.waku.sh. One-time setup lives in RELEASING.md.
+archive, and writes the appcast. Artifacts stay in dist/ for the GitHub
+Release workflow to attach. One-time setup lives in RELEASING.md.
 
 Options:
-  --local                       Build, notarize, and write the DMG + zip
-                                without publishing to R2
-  --force                       Publish even if this version is already in R2
+  --local                       Accepted for CI. Artifacts are always written
+                                locally; nothing is uploaded
   --output <path>               DMG output path (default: dist/Launcher-<version>.dmg)
   --signing-identity <name>     Developer ID Application identity selector
                                 (or LAUNCHER_SIGNING_IDENTITY; required unless --adhoc)
@@ -57,19 +54,15 @@ Environment:
   LAUNCHER_SIGNING_IDENTITY         Developer ID Application identity selector
   LAUNCHER_ANALYTICS_ENDPOINT       analytics endpoint embedded at build time
   LAUNCHER_ANALYTICS_WEBSITE_ID     analytics website ID embedded at build time
-  LAUNCHER_R2_REMOTE                rclone remote name (default: r2)
-  LAUNCHER_R2_BUCKET                R2 bucket name (default: launcher-releases)
   LAUNCHER_DOWNLOAD_URL_PREFIX      base URL for archive links
                                 (default: ${defaultDownloadUrlPrefix})
-  LAUNCHER_HISTORY_COUNT            prior archives pulled for deltas (default: 15)
-  LAUNCHER_NO_HISTORY=1             skip pulling prior archives (no deltas)
   SPARKLE_BIN                   Sparkle tools dir (default: the bundle.sh cache
                                 under .launcher-cache/sparkle)
   SPARKLE_PRIVATE_KEY           Sparkle EdDSA private key (otherwise keychain)
 
 Before the first production release:
   xcrun notarytool store-credentials NOTARY   # notarization credentials
-  See RELEASING.md for the R2 bucket, rclone remote, and Sparkle key setup.
+  See RELEASING.md for the Sparkle key setup.
 `;
 
 const { values } = parseArgs({
@@ -77,7 +70,6 @@ const { values } = parseArgs({
   options: {
     adhoc: { type: "boolean" },
     "build-number": { type: "string" },
-    force: { type: "boolean" },
     help: { type: "boolean", short: "h" },
     local: { type: "boolean" },
     "notary-profile": { type: "string" },
@@ -148,21 +140,11 @@ const explicitBuildNumber =
 const analyticsEndpoint = process.env.LAUNCHER_ANALYTICS_ENDPOINT?.trim();
 const analyticsWebsiteId = process.env.LAUNCHER_ANALYTICS_WEBSITE_ID?.trim();
 const localOnly = values.local ?? false;
-const force = values.force ?? false;
-// Publishing requires a Developer ID-signed, notarized DMG, so the flags that
-// weaken signing imply --local.
-const publishing = !localOnly && !adhoc && !skipNotarize;
+// A full release is a signed, notarized DMG. Flags that weaken signing stay local.
+const fullRelease = !localOnly && !adhoc && !skipNotarize;
 
-const r2Remote = process.env.LAUNCHER_R2_REMOTE ?? "r2";
-const r2Bucket = process.env.LAUNCHER_R2_BUCKET ?? "launcher-releases";
-const r2Destination = `${r2Remote}:${r2Bucket}`;
-// A bucket-scoped R2 API token cannot create buckets, and rclone otherwise
-// checks/creates one before writing. The bucket must already exist.
-const rcloneFlags = ["--s3-no-check-bucket"];
 const downloadUrlPrefix =
   process.env.LAUNCHER_DOWNLOAD_URL_PREFIX ?? defaultDownloadUrlPrefix;
-const historyCount = Number(process.env.LAUNCHER_HISTORY_COUNT ?? "15");
-const skipHistory = process.env.LAUNCHER_NO_HISTORY === "1";
 
 if (adhoc && values["signing-identity"]) {
   throw new Error("Use either --adhoc or --signing-identity, not both.");
@@ -176,9 +158,6 @@ if (explicitBuildNumber && !/^\d+(?:\.\d+){0,2}$/.test(explicitBuildNumber)) {
   throw new Error(
     "--build-number must contain one to three period-separated integers.",
   );
-}
-if (!Number.isSafeInteger(historyCount) || historyCount < 0) {
-  throw new Error("LAUNCHER_HISTORY_COUNT must be a non-negative integer.");
 }
 if (!values["skip-build"] && (!analyticsEndpoint || !analyticsWebsiteId)) {
   throw new Error(
@@ -201,9 +180,6 @@ if (!adhoc && !skipNotarize) {
   requireTool("xcrun");
   requireTool("spctl");
 }
-if (publishing) {
-  requireTool("rclone");
-}
 
 process.chdir(projectRoot);
 
@@ -222,42 +198,15 @@ const shortVersion = version.split("-", 1)[0];
 const buildNumber = explicitBuildNumber ?? derivedBuildNumber(version);
 const dmgName = `${appName}-${version}.dmg`;
 const zipName = `${appName}-${version}.zip`;
-if (publishing && version !== shortVersion) {
+if (fullRelease && version !== shortVersion) {
   throw new Error(
     `Version ${version} is a prerelease, and the appcast serves a single ` +
       "stable channel. Release a stable version, or build with --local.",
   );
 }
-if (!publishing) {
+if (!fullRelease) {
   const reason = localOnly ? "--local" : adhoc ? "--adhoc" : "--skip-notarize";
-  console.log(`Building without publishing (${reason}).`);
-}
-
-// Fail before the long build: the bucket must exist and the version must be
-// new. An unreachable remote should not surface after notarization.
-if (publishing) {
-  logStep(`Checking ${r2Destination}`);
-  const listing = await $`rclone lsf ${r2Destination} ${rcloneFlags}`
-    .quiet()
-    .nothrow();
-  if (listing.exitCode !== 0) {
-    const detail = listing.stderr.toString().trim();
-    if (detail.includes("directory not found")) {
-      throw new Error(
-        `R2 bucket "${r2Bucket}" does not exist on remote "${r2Remote}". ` +
-          "Create it in the Cloudflare dashboard and set " +
-          "LAUNCHER_DOWNLOAD_URL_PREFIX (see RELEASING.md), then re-run.",
-      );
-    }
-    throw new Error(`Cannot reach ${r2Destination}: ${detail}`);
-  }
-  const published = listing.stdout.toString().split("\n").filter(Boolean);
-  if (published.includes(zipName) && !force) {
-    throw new Error(
-      `${zipName} is already published — bump the version in Cargo.toml, ` +
-        "or pass --force to re-release it.",
-    );
-  }
+  console.log(`Building a local release (${reason}).`);
 }
 
 const outputPath = resolve(
@@ -578,55 +527,11 @@ try {
   logStep(`Packaging ${zipName}`);
   await $`ditto -c -k --keepParent ${appBundle} ${zipPath}`;
 
-  // A clean staging directory holds this release plus, when publishing, the
-  // recent history generate_appcast needs to build binary deltas.
+  // This release's zip and notes. GitHub Releases keeps older assets, so the
+  // appcast for this run covers the version being built.
   const updatesDirectory = join(projectRoot, "dist", "updates");
   await rm(updatesDirectory, { force: true, recursive: true });
   await mkdir(updatesDirectory, { recursive: true });
-
-  if (publishing && !skipHistory) {
-    logStep(
-      `Selecting the ${historyCount} most recent archives from R2 (for deltas)`,
-    );
-    type RemoteFile = { Name: string; IsDir: boolean };
-    const remoteFiles = JSON.parse(
-      await $`rclone lsjson ${r2Destination} ${rcloneFlags} --files-only --include ${"*.zip"} --include ${"appcast.xml"}`
-        .quiet()
-        .text(),
-    ) as RemoteFile[];
-    const archivePattern = new RegExp(`^${appName}-.+\\.zip$`);
-    const archiveVersion = (name: string) =>
-      name.slice(appName.length + 1, -".zip".length);
-    const versionOrder = new Intl.Collator("en", { numeric: true });
-    const recentArchives = remoteFiles
-      .filter(
-        ({ Name, IsDir }) =>
-          !IsDir && archivePattern.test(Name) && Name !== zipName,
-      )
-      .sort((a, b) =>
-        versionOrder.compare(archiveVersion(b.Name), archiveVersion(a.Name)),
-      )
-      .slice(0, historyCount)
-      .map(({ Name }) => Name);
-    const historyFiles = [
-      ...(remoteFiles.some(({ Name }) => Name === "appcast.xml")
-        ? ["appcast.xml"]
-        : []),
-      ...recentArchives,
-    ];
-    if (historyFiles.length > 0) {
-      const includeFlags = historyFiles.flatMap((name) => [
-        "--include",
-        `/${name}`,
-      ]);
-      await $`rclone copy ${r2Destination} ${updatesDirectory} ${rcloneFlags} ${includeFlags}`;
-    }
-    console.log(
-      recentArchives.length > 0
-        ? `Pulled ${recentArchives.join(", ")}`
-        : "No prior archives found.",
-    );
-  }
 
   await $`ditto ${zipPath} ${join(updatesDirectory, zipName)}`;
 
@@ -640,9 +545,8 @@ try {
   const notesName = `${appName}-${version}.md`;
   const notesContents = `${notes ?? "See CHANGELOG.md for details."}\n`;
   await Bun.write(join(updatesDirectory, notesName), notesContents);
-  // The tag workflow publishes files from dist/ as GitHub release assets;
-  // sync-release then mirrors those assets to R2. Keep the notes beside the
-  // appcast there as well so Sparkle's release-notes URL cannot 404.
+  // The release workflow attaches dist/ files to the GitHub Release. Keep the
+  // notes beside the appcast so the release-notes URL can resolve.
   await Bun.write(join(projectRoot, "dist", notesName), notesContents);
   console.log(
     notes
@@ -653,25 +557,6 @@ try {
   logStep("Generating the signed appcast");
   await generateAppcast(updatesDirectory, downloadUrlPrefix);
   await $`ditto ${join(updatesDirectory, "appcast.xml")} ${join(projectRoot, "dist", "appcast.xml")}`;
-
-  if (publishing) {
-    // Archives and the DMG are immutable once published → cache forever.
-    // appcast.xml changes every release → keep it fresh so update checks are
-    // never served stale.
-    const immutableCache =
-      "Cache-Control: public, max-age=31536000, immutable";
-    logStep(`Uploading ${dmgName} to ${r2Destination}`);
-    await $`rclone copyto ${outputPath} ${`${r2Destination}/${dmgName}`} ${rcloneFlags} --header-upload ${immutableCache} --progress`;
-    logStep(`Uploading update archives to ${r2Destination}`);
-    await $`rclone copy ${updatesDirectory} ${r2Destination} ${rcloneFlags} --exclude ${"appcast.xml"} --exclude ${"old_updates/**"} --header-upload ${immutableCache} --progress`;
-    logStep("Uploading appcast.xml");
-    await $`rclone copyto ${join(updatesDirectory, "appcast.xml")} ${`${r2Destination}/appcast.xml`} ${rcloneFlags} --header-upload ${"Cache-Control: public, max-age=300, must-revalidate"}`;
-
-    console.log(`\nLauncher ${version} (build ${buildNumber}) is live:`);
-    console.log(`  download : ${downloadUrlPrefix}${dmgName}`);
-    console.log(`  update   : ${downloadUrlPrefix}${zipName}`);
-    console.log(`  feed     : ${downloadUrlPrefix}appcast.xml`);
-  }
 
   console.log(`\nDMG ready: ${outputPath}`);
   console.log(`ZIP ready: ${zipPath}`);

@@ -6,23 +6,24 @@ set -eu
 # PATH, and registers the desktop entry. docs/linux.md documents the
 # equivalent manual steps.
 #
-#   LAUNCHER_BUNDLE_PATH=launcher-<version>-<target>.tar.gz sh install.sh
+#   LAUNCHER_BUNDLE_PATH=launcher-<version>-<target>.tar.gz sh scripts/install-linux.sh
+#   sh scripts/install-linux.sh
 #
 # Environment:
 #   LAUNCHER_VERSION        install this version instead of the latest
 #   LAUNCHER_BUNDLE_PATH    install a local tarball instead of downloading
-#   LAUNCHER_RELEASES_URL   base URL to download from; required unless
-#                           LAUNCHER_BUNDLE_PATH is set. Do not point this at
-#                           the upstream Waku release host.
+#   LAUNCHER_RELEASES_URL   directory of release files (default: this
+#                           repository's latest GitHub release). Do not point
+#                           this at the upstream Waku release host.
 
 usage() {
     cat <<'USAGE'
 Install Launcher for Linux into ~/.local.
 
 Usage:
-  LAUNCHER_BUNDLE_PATH=<tarball> sh install.sh
-  LAUNCHER_RELEASES_URL=https://example.invalid sh install.sh
-  sh install.sh --uninstall
+  sh scripts/install-linux.sh
+  LAUNCHER_BUNDLE_PATH=<tarball> sh scripts/install-linux.sh
+  sh scripts/install-linux.sh --uninstall
 
 Options:
   --uninstall   Remove Launcher, leaving ~/.launcher (projects and settings) alone
@@ -34,7 +35,7 @@ main() {
     app_dir="$HOME/.local/launcher.app"
     bin_link="$HOME/.local/bin/launcher"
     desktop_file="$HOME/.local/share/applications/dev.lakphy.launcher.desktop"
-    releases="${LAUNCHER_RELEASES_URL:-}"
+    releases="${LAUNCHER_RELEASES_URL:-https://github.com/Lakphy/launcher/releases/latest/download}"
 
     case "${1:-}" in
         --uninstall) uninstall; return ;;
@@ -86,11 +87,6 @@ main() {
     if [ -n "${LAUNCHER_BUNDLE_PATH:-}" ]; then
         cp "$LAUNCHER_BUNDLE_PATH" "$archive"
     else
-        if [ -z "$releases" ]; then
-            echo "Set LAUNCHER_RELEASES_URL, or pass LAUNCHER_BUNDLE_PATH." >&2
-            echo "Releases are listed at https://github.com/Lakphy/launcher/releases" >&2
-            exit 1
-        fi
         case "$releases" in
             *waku.sh*)
                 echo "Refusing to download Launcher from the upstream Waku host." >&2

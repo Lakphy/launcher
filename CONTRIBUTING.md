@@ -62,12 +62,12 @@ The archive is written under `target/release` with an install-prefix layout
 not bundle system graphics libraries; distribution packages should declare
 those runtime dependencies normally.
 
-`website/public/install.sh` installs that archive into `~/.local`. Point it at
-a local build to exercise it without publishing:
+`scripts/install-linux.sh` installs that archive into `~/.local`. Point it at
+a local build:
 
 ```sh
 LAUNCHER_BUNDLE_PATH=target/release/launcher-<version>-<target>.tar.gz \
-  sh website/public/install.sh
+  sh scripts/install-linux.sh
 ```
 
 [docs/linux.md](docs/linux.md) documents both paths for users.

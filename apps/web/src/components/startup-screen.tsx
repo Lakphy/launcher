@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { LauncherIcon } from '@/components/launcher-icon'
 import { useI18n } from '@/lib/i18n'
-import launcherAppIconUrl from '../../../../website/public/app-icon.png'
+import launcherAppIconUrl from '../../../../resources/app-icon.png'
 
 export function StartupScreen({
   error,

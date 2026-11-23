@@ -18,7 +18,7 @@ import {
   type SessionItem,
 } from '@/lib/sidebar-presentation'
 import { cn } from '@/lib/utils'
-import launcherAppIconUrl from '../../../../website/public/app-icon.png'
+import launcherAppIconUrl from '../../../../resources/app-icon.png'
 
 interface SidebarProps {
   taskState: TaskState

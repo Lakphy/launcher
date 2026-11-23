@@ -6,7 +6,7 @@ import { LauncherIcon } from '@/components/launcher-icon'
 import { useDocumentTitle } from '@/hooks/use-document-title'
 import { useDaemon } from '@/lib/daemon-context'
 import { useI18n } from '@/lib/i18n'
-import launcherAppIconUrl from '../../../../website/public/app-icon.png'
+import launcherAppIconUrl from '../../../../resources/app-icon.png'
 
 export function ConnectionPanel({ title }: { title?: string } = {}) {
   const { t } = useI18n()

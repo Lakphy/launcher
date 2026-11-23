@@ -35,17 +35,16 @@ bun run release
 - GitHub Actions: [`.github/workflows/release.yml`](.github/workflows/release.yml)
   builds Linux (x86_64, arm64), Windows (x86_64, arm64), and macOS archives on
   a `v*` tag — or on a manual **Run workflow**, which takes the version from
-  `Cargo.toml` — and opens a draft GitHub release;
-  [`.github/workflows/sync-release.yml`](.github/workflows/sync-release.yml)
-  copies published assets into the R2 bucket.
+  `Cargo.toml` — and opens a draft GitHub release. Publishing that draft is
+  the download location.
 
 ---
 
 ## One-time setup
 
 The release runs on [Bun](https://bun.sh) and needs
-[`create-dmg`](https://github.com/create-dmg/create-dmg) and
-[rclone](https://rclone.org) (`brew install bun create-dmg rclone`).
+[`create-dmg`](https://github.com/create-dmg/create-dmg)
+(`brew install bun create-dmg`).
 
 ### 1. Sparkle signing keys
 
@@ -90,21 +89,12 @@ xcrun notarytool store-credentials NOTARY \
 Override the environment with `--signing-identity`, or change the notary
 profile with `--notary-profile` / `LAUNCHER_NOTARY_PROFILE`.
 
-### 3. Cloudflare R2 bucket + domain  ← **still to do once**
+### 3. GitHub Releases
 
-1. Create the bucket **`launcher-releases`** (Cloudflare dashboard → R2 → Create
-   bucket). The release script will not create it — a bucket-scoped API token
-   can't.
-2. Attach a custom domain you control to the bucket (bucket → Settings →
-   Custom Domains). Do not use `releases.waku.sh`. Set
-   `LAUNCHER_DOWNLOAD_URL_PREFIX` to the resulting `https://…/` origin.
-3. Make sure the R2 API token behind the `r2` rclone remote covers this bucket
-   (R2 → Manage API Tokens → Object Read & Write). The remote already exists
-   for kero; if `rclone lsf r2:launcher-releases --s3-no-check-bucket` returns
-   *AccessDenied* after the bucket exists, extend the token's bucket list.
-
-The rclone remote itself (`~/.config/rclone/rclone.conf`, type S3, provider
-Cloudflare, `no_check_bucket = true`) is shared with kero and needs no change.
+There is no separate download site. The Release workflow attaches every
+artifact to a draft GitHub Release. Publishing the draft makes those files
+the public downloads, at
+`https://github.com/Lakphy/launcher/releases/download/v<version>/`.
 
 ---
 
@@ -123,23 +113,21 @@ Cloudflare, `no_check_bucket = true`) is shared with kero and needs no change.
    bun run release
    ```
 
-The script checks R2 up front (bucket reachable, version not already
-published), builds and signs the app via `scripts/bundle.sh release`, verifies
+The script builds and signs the app via `scripts/bundle.sh release`, verifies
 the bundled JS REPL and computer-use helper, builds the styled DMG, notarizes
-and staples DMG + app, zips the app for Sparkle, pulls the recent archives
-from R2 so `generate_appcast` can build binary deltas, attaches the changelog
-section as release notes, regenerates the signed `appcast.xml`, and uploads
-everything with immutable cache headers (the appcast itself stays
-`max-age=300`). When it finishes:
+and staples DMG + app, zips the app for Sparkle, attaches the changelog
+section as release notes, and writes a signed
+`appcast.xml` under `dist/`. Attach those files to the GitHub Release. When
+it finishes:
 
-- **Download link**: `<LAUNCHER_DOWNLOAD_URL_PREFIX>Launcher-<version>.dmg`
-- **In-app updates**: served from that same origin via the appcast, after
-  `SUFeedURL` and the Linux and Windows feed constants point there.
+- **Download link**: `https://github.com/Lakphy/launcher/releases/download/v<version>/Launcher-<version>.dmg`
+- **In-app updates**: the same release's appcast, after `SUFeedURL` and the
+  Linux and Windows feed constants point there.
 
 Test by keeping an older build around, launching it, and choosing
 **Check for Updates…**.
 
-### GitHub draft release + R2 sync
+### GitHub draft release
 
 The Release workflow runs two ways:
 
@@ -161,7 +149,7 @@ Linux CI adds:
 - `launcher-<version>-x86_64-unknown-linux-gnu.tar.gz`
 - `launcher-<version>-aarch64-unknown-linux-gnu.tar.gz`
 - `appcast-linux-x86_64.xml`, `appcast-linux-aarch64.xml`
-- `latest-linux.txt` — the version `install.sh` resolves "latest" to
+- `latest-linux.txt` — the version `scripts/install-linux.sh` resolves "latest" to
 
 Windows CI adds:
 
@@ -206,8 +194,8 @@ rolls back if the replacement cannot open its main window.
   with Node's Ed25519 over the same `SPARKLE_PRIVATE_KEY`, and refuse to run
   when the key does not derive `SUPublicEDKey` (signing with the wrong key
   ships a feed the app rejects).
-- The step pulls the live feeds down first and merges, so previously published
-  releases keep their entries.
+- Each feed contains the artifacts from this run. Older releases stay
+  downloadable as their own GitHub Release assets.
 
 Both Linux jobs run on **Ubuntu 22.04**, and that choice is load-bearing: the
 binaries link against the build machine's glibc, so the runner sets the oldest
@@ -216,20 +204,14 @@ Moving those jobs to a newer runner silently drops support for everything
 older.
 
 The workflow opens (or updates) a **draft** GitHub release with those files and
-the matching `CHANGELOG.md` section. Publishing the GitHub release syncs the
-assets — including every signed update feed — to R2.
+the matching `CHANGELOG.md` section. Publishing the draft makes the assets
+public on GitHub Releases.
 
-`appcast.xml`, the architecture-specific Linux/Windows appcasts,
-`latest-linux.txt`, and `latest-windows.txt` are the bucket's mutable pointers
-and upload with a short cache lifetime; everything else is versioned and
-cached forever. Linux users install from that bucket via
-[`website/public/install.sh`](website/public/install.sh). Set
-`LAUNCHER_RELEASES_URL` to the directory that hosts the Linux archives. See
-[docs/linux.md](docs/linux.md).
+`latest-linux.txt` is what
+[`scripts/install-linux.sh`](scripts/install-linux.sh) reads from the latest
+GitHub Release to choose a version. See [docs/linux.md](docs/linux.md).
 
-Publishing that GitHub release (or running **Sync release** from Actions)
-uploads the assets to the `launcher-releases` R2 bucket. Configure these repository
-secrets first:
+Configure these repository secrets first:
 
 | Secret | Purpose |
 | --- | --- |
@@ -244,25 +226,15 @@ secrets first:
 | `SPARKLE_PRIVATE_KEY` | EdDSA private key for `generate_appcast` |
 | `WINDOWS_CERTIFICATE` | optional; base64-encoded Authenticode `.pfx` |
 | `WINDOWS_CERTIFICATE_PASSWORD` | optional; password for that `.pfx` |
-| `R2_ACCOUNT_ID` | Cloudflare account id for the R2 API |
-| `R2_ACCESS_KEY_ID` | R2 Object Read & Write token |
-| `R2_SECRET_ACCESS_KEY` | matching secret |
-| `R2_BUCKET` | optional; defaults to `launcher-releases` |
-
 ### Options
 
 | Flag / Env | Default | Purpose |
 | --- | --- | --- |
-| `--local` | — | build, notarize, and write the DMG + zip without publishing |
-| `--force` | — | re-publish a version that already exists in R2 |
+| `--local` | — | build and write artifacts locally; CI uses this |
 | `--adhoc`, `--skip-notarize` | — | local test builds (imply `--local`) |
 | `--skip-build` | — | reuse existing release binaries |
 | `--build-number <n>` / `LAUNCHER_BUILD_NUMBER` | derived | `CFBundleVersion` override |
-| `LAUNCHER_R2_REMOTE` | `r2` | rclone remote name |
-| `LAUNCHER_R2_BUCKET` | `launcher-releases` | R2 bucket |
-| `LAUNCHER_DOWNLOAD_URL_PREFIX` | required | base URL in the appcast; do not use `releases.waku.sh` |
-| `LAUNCHER_HISTORY_COUNT` | `15` | recent archives pulled for delta generation |
-| `LAUNCHER_NO_HISTORY=1` | — | skip pulling old archives (full updates only) |
+| `LAUNCHER_DOWNLOAD_URL_PREFIX` | GitHub release download URL | base URL written into the appcast |
 | `SPARKLE_BIN` | the `.launcher-cache` copy | Sparkle tools directory |
 
 ---
@@ -296,15 +268,14 @@ secrets first:
   `bundle.sh` strips them (plus headers/modules) from the embedded framework
   and re-signs the rest with the app's identity — hardened-runtime library
   validation requires the identities to match.
-- **Old archives stay in R2** so far-behind users can still be served; only
-  the recent history is staged locally under `dist/updates/` (git-ignored).
-- **Platform artifacts:** keep the bucket layout flat and platform-tagged by
-  artifact name/extension — today's macOS names
-  (`Launcher-<v>.dmg`, `Launcher-<v>.zip`, `appcast.xml`) must keep their URLs.
-  Linux CI releases produce `launcher-<v>-<target>.tar.gz` with
-  `scripts/bundle-linux.sh`, Windows CI produces `launcher-<v>-<target>.zip` with
-  `scripts/bundle-windows.ts`, and both land in GitHub Releases, then R2 via
-  the sync workflow. Windows also ships `Launcher-<v>-<arch>-Setup.exe`; each
+- **Old archives stay on their GitHub Release** so a previous version can
+  still be downloaded. `dist/updates/` (git-ignored) only stages the version
+  being built.
+- **Platform artifacts** are attached to that GitHub Release. macOS names are
+  `Launcher-<v>.dmg`, `Launcher-<v>.zip`, and `appcast.xml`. Linux CI produces
+  `launcher-<v>-<target>.tar.gz` with `scripts/bundle-linux.sh`. Windows CI
+  produces `launcher-<v>-<target>.zip` with `scripts/bundle-windows.ts` and
+  `Launcher-<v>-<arch>-Setup.exe`. Each
   native client updates from `appcast-<platform>-<arch>.xml` while the Linux
   installer resolves `latest-linux.txt`. `src/updater.rs` is the per-platform
   seam, and everything

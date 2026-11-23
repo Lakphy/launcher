@@ -17,10 +17,14 @@ Source and release archives are published from
 On macOS, download the `.dmg` from that page when a release is published.
 In-app updates stay off until this fork publishes its own appcast and signing key.
 
-On Linux, install a tarball with `website/public/install.sh`. Set
-`LAUNCHER_BUNDLE_PATH` to a local archive, or `LAUNCHER_RELEASES_URL` to an
-HTTPS directory that hosts the archives. The script installs into `~/.local`
-without root. See [docs/linux.md](docs/linux.md).
+On Linux, from a clone of this repository:
+
+```sh
+sh scripts/install-linux.sh
+```
+
+The script downloads the latest GitHub release into `~/.local` without root.
+See [docs/linux.md](docs/linux.md).
 
 On Windows, run `Launcher-<version>-<arch>-Setup.exe` from the
 [latest release](https://github.com/Lakphy/launcher/releases/latest). It installs

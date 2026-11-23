@@ -27,7 +27,7 @@ install -Dm644 resources/linux/dev.lakphy.launcher.desktop \
   "$package_dir/share/applications/dev.lakphy.launcher.desktop"
 install -Dm644 resources/linux/self-update-v1 \
   "$package_dir/share/launcher/self-update-v1"
-install -Dm644 website/public/app-icon.png \
+install -Dm644 resources/app-icon.png \
   "$package_dir/share/icons/hicolor/256x256/apps/dev.lakphy.launcher.png"
 install -Dm644 LICENSE "$package_dir/share/licenses/launcher/LICENSE"
 

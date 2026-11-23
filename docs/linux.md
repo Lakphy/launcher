@@ -2,17 +2,20 @@
 
 ## Install
 
-Release archives are listed on the
+Release archives are on the
 [GitHub releases page](https://github.com/Lakphy/launcher/releases).
-Install a downloaded tarball with:
+From a checkout, the install script downloads the latest tarball:
+
+```sh
+sh scripts/install-linux.sh
+```
+
+To install a tarball you already have:
 
 ```sh
 LAUNCHER_BUNDLE_PATH=launcher-<version>-<target>.tar.gz \
-  sh website/public/install.sh
+  sh scripts/install-linux.sh
 ```
-
-Set `LAUNCHER_RELEASES_URL` instead when an HTTPS directory hosts
-`latest-linux.txt` and `launcher-<version>-<target>.tar.gz`.
 
 The script needs no root. It unpacks the release tarball into
 `~/.local/launcher.app` and installs the desktop entry into
@@ -86,13 +89,13 @@ previous version.
 System-wide installs such as
 `/usr/local`, builds without the managed-install marker, root sessions, and
 package-manager-owned builds do not modify themselves; upgrade those through
-their original installation method. Re-running `install.sh` remains a safe
+their original installation method. Re-running `scripts/install-linux.sh` remains a safe
 manual fallback for the default `~/.local/launcher.app` install.
 
 ## Uninstalling
 
 ```sh
-sh website/public/install.sh --uninstall
+sh scripts/install-linux.sh --uninstall
 ```
 
 This removes `~/.local/launcher.app`, the symlink, and the desktop entry. Projects
@@ -112,7 +115,7 @@ To exercise the install script against that local build:
 
 ```sh
 LAUNCHER_BUNDLE_PATH=target/release/launcher-<version>-<target>.tar.gz \
-  sh website/public/install.sh
+  sh scripts/install-linux.sh
 ```
 
 ## Computer Use
