@@ -1396,11 +1396,12 @@ mod windows {
         /// The interop the whole update path rests on: macOS signs with
         /// Sparkle's `sign_update`, Windows releases sign with Node's Ed25519
         /// in `scripts/appcast-windows.ts`, and this verifies both. The vector
-        /// below came from that script with a throwaway key.
+        /// below is a throwaway key signed over the Launcher payload with that
+        /// same Node path.
         #[test]
         fn a_signature_from_the_release_script_verifies_here() {
-            const PUBLIC: &str = "7gZ3dbx+MPQD4vc2dk7olL9QU66JIjpJ1iqNNafU2lQ=";
-            const SIGNATURE: &str = "eBIPKGvQSxFIVNwOzNjzHYs/AGiYFIe3pGulv0TeocoMN0+0l28OJZrlJ2ZuQnNBfif10VW3virGo+7GP3TwCw==";
+            const PUBLIC: &str = "rOXkY6IS+5wYqCRByQMAo47vEnK/TZw2j+aiEzl/tnI=";
+            const SIGNATURE: &str = "rTRjS3H2HXR22RKY8YeoKlsGWaZrnuGnjo8c3Y1rfbL7YZNqQ8HNjePATZRZlgwsrChYhz8DazGcAHVgtTP2Aw==";
             const PAYLOAD: &[u8] = b"Launcher-0.0.0-x86_64-Setup.exe contents";
 
             let decode = |value: &str| {
