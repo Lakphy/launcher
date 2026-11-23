@@ -31,9 +31,11 @@ maps to there; a row with no selector is a Launcher decision, explained inline.
 | `ctrl-b` / `ctrl-f` | one character | `moveBackward:` / `moveForward:` |
 | `alt-left` / `alt-right` | one word | `moveWordLeft:` / `moveWordRight:` |
 | `ctrl-alt-b` / `ctrl-alt-f` | one word | `moveWordBackward:` / `moveWordForward:` |
-| `up` / `down` | one row, keeping the column goal across a short row; at the first or last row the key propagates | `moveUp:` / `moveDown:` |
-| `ctrl-p` / `ctrl-n` | one row | `moveUp:` / `moveDown:` |
+| `up` / `down` | one row, keeping the column goal across a short row; on the first row Up moves to the start, on the last row Down moves to the end; already there, the key propagates | `moveUp:` / `moveDown:` |
+| `ctrl-p` / `ctrl-n` | one row, including those edges | `moveUp:` / `moveDown:` |
 | `cmd-left` / `cmd-right` | row start / end | `moveToLeftEndOfLine:` / `moveToRightEndOfLine:` |
+| `ctrl-left` / `ctrl-right` | row start / end | `moveToLeftEndOfLine:` / `moveToRightEndOfLine:` |
+| `pageup` / `pagedown` | scroll one viewport when the field overflows; otherwise the key propagates | — |
 | `ctrl-a` / `ctrl-e` | paragraph start / end; stays put on repeat | `moveToBeginningOfParagraph:` / `moveToEndOfParagraph:` |
 | `alt-up` / `alt-down` | paragraph start / end; on repeat, the previous / next paragraph | `moveParagraphBackward:` / `moveParagraphForward:` |
 | `cmd-up` / `cmd-down` | document start / end | `moveToBeginningOfDocument:` / `moveToEndOfDocument:` |
@@ -91,7 +93,6 @@ layout to read a row from, so a stale row can never cost more than the line.
 
 | Chord | Why |
 | --- | --- |
-| `pageup` / `pagedown` | native views only scroll on these; leaving them unbound lets the transcript page |
 | `shift-pageup` / `shift-pagedown`, `alt-pageup` / `alt-pagedown`, `ctrl-v` | page-wise caret motion needs the field's viewport height; not implemented yet |
 | `ctrl-o`, `ctrl-t`, `ctrl-y`, `ctrl-l` | open-line, transpose, yank, centre; rare, and yank needs a kill ring |
 | `ctrl-j` | AppKit's `insertNewline:`, the same selector as Enter, which would send |
@@ -120,6 +121,13 @@ TextInput`), `up`, `down`, `ctrl-p` and `ctrl-n` move its highlight, `enter`
 and `tab` accept, and `escape` dismisses. The command palette, skills, model,
 branch and settings search fields bind their list navigation the same way at
 their own contexts.
+
+With the popup closed, Up at offset 0 replaces the composer with the previous
+sent message — user messages in the transcript, then queued follow-ups — and
+puts the caret at the end of that text. Further Up/Down walk that list while
+the caret stays where the walk left it. Down past the newest message restores
+the draft that was on screen. Moving the caret, pressing Up on the oldest
+message, or landing back on the draft returns Up and Down to ordinary row motion.
 
 ## Checking by hand
 

@@ -39,6 +39,8 @@ actions!(
         ParagraphEnd,
         ParagraphBackward,
         ParagraphForward,
+        PageUp,
+        PageDown,
         MoveToPreviousWord,
         MoveToNextWord,
         SelectToStart,
@@ -121,6 +123,10 @@ pub fn init(cx: &mut App) {
         // and the keystroke falls through to the surface's own escape —
         // dismiss a popover, close the palette, cancel the turn.
         KeyBinding::new("escape", Clear, Some("TextInput")),
+        // Native text views scroll on these. A field that cannot move gives
+        // the key back, which is what lets the transcript page.
+        KeyBinding::new("pageup", PageUp, Some("TextInput")),
+        KeyBinding::new("pagedown", PageDown, Some("TextInput")),
     ]);
 
     #[cfg(target_os = "macos")]
@@ -167,6 +173,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-n", Down, Some("TextInput")),
         KeyBinding::new("cmd-left", LineStart, Some("TextInput")),
         KeyBinding::new("cmd-right", LineEnd, Some("TextInput")),
+        // `moveToLeftEndOfLine:` / `moveToRightEndOfLine:`. The shift chords
+        // below already select to those ends; the plain chords were unbound.
+        KeyBinding::new("ctrl-left", LineStart, Some("TextInput")),
+        KeyBinding::new("ctrl-right", LineEnd, Some("TextInput")),
         KeyBinding::new("cmd-up", Home, Some("TextInput")),
         KeyBinding::new("cmd-down", End, Some("TextInput")),
         // Like the kills, ctrl-a/ctrl-e are paragraph motion in AppKit
@@ -692,6 +702,13 @@ pub struct TextInput {
     /// one visual row or the start of the next, so the offset alone is not
     /// enough to reproduce native textarea movement or paint its caret.
     vertical_navigation: Option<VerticalNavigation>,
+    /// Sent prompts the composer can recall, oldest first. Empty on every
+    /// other field. Not a second log: the session already stores these.
+    sent_prompts: Vec<String>,
+    /// An in-progress Up/Down walk over `sent_prompts`, plus the draft that
+    /// was on screen when the walk started. `None` once the caret moves or
+    /// the walk reaches either end.
+    prompt_recall: Option<PromptRecall>,
     is_selecting: bool,
     selected_word_range: Option<Range<usize>>,
     history: EditHistory,
@@ -699,6 +716,18 @@ pub struct TextInput {
     context_menu: ContextMenuHandle,
     blink_cursor: Entity<BlinkCursor>,
     _subscriptions: Vec<Subscription>,
+}
+
+#[derive(Clone)]
+struct PromptRecall {
+    /// Snapshot of the sent prompts when the walk began, oldest first.
+    prompts: Vec<String>,
+    /// Composer text before the first recall, restored by Down.
+    draft: String,
+    /// Index into `prompts`. The draft is the position just past the end.
+    index: usize,
+    /// Caret this step left behind. A different caret ends the walk.
+    placed: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -760,6 +789,8 @@ impl TextInput {
             caret_reconciled: None,
             last_layout: None,
             vertical_navigation: None,
+            sent_prompts: Vec::new(),
+            prompt_recall: None,
             is_selecting: false,
             selected_word_range: None,
             history: EditHistory::default(),
@@ -1011,6 +1042,7 @@ impl TextInput {
     /// match. Ignored unless the range sits on character boundaries, so a
     /// selection computed against stale content cannot split a code point.
     pub fn select_range(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
+        self.abandon_prompt_recall();
         if range.start > range.end
             || range.end > self.content.len()
             || !self.content.is_char_boundary(range.start)
@@ -1028,6 +1060,7 @@ impl TextInput {
     /// Select the whole content, the way reopening a find bar re-arms its
     /// query for retyping. Unlike the `SelectAll` action this needs no window.
     pub fn select_all_text(&mut self, cx: &mut Context<Self>) {
+        self.abandon_prompt_recall();
         self.selected_range = 0..self.content.len();
         self.selection_reversed = false;
         self.vertical_navigation = None;
@@ -1062,6 +1095,7 @@ impl TextInput {
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
+        self.abandon_prompt_recall();
         let changed = !self.content.is_empty();
         self.content = "".into();
         self.selected_range = 0..0;
@@ -1082,6 +1116,7 @@ impl TextInput {
     }
 
     pub fn set_content(&mut self, content: impl Into<SharedString>, cx: &mut Context<Self>) {
+        self.abandon_prompt_recall();
         let content = content.into();
         let changed = self.content != content;
         self.content = content;
@@ -1159,6 +1194,134 @@ impl TextInput {
         self.move_vertically(true, true, cx);
     }
 
+    fn page_up(&mut self, _: &PageUp, _: &mut Window, cx: &mut Context<Self>) {
+        self.scroll_page(false, cx);
+    }
+
+    fn page_down(&mut self, _: &PageDown, _: &mut Window, cx: &mut Context<Self>) {
+        self.scroll_page(true, cx);
+    }
+
+    /// Scroll by one viewport. A field that is not capped, or that is already
+    /// against the edge, propagates so the transcript can page.
+    fn scroll_page(&mut self, down: bool, cx: &mut Context<Self>) {
+        if !self.auto_height {
+            cx.propagate();
+            return;
+        }
+        let viewport = self.scroll_handle.bounds().size.height;
+        let max_offset = self.scroll_handle.max_offset().y;
+        let current = self.scroll_handle.offset().y;
+        let Some(next) = page_scroll_y(current, viewport, max_offset, down) else {
+            cx.propagate();
+            return;
+        };
+        let offset = self.scroll_handle.offset();
+        self.scroll_handle.set_offset(point(offset.x, next));
+        cx.notify();
+    }
+
+    /// Sent prompts for Up-to-recall. Empty except on the composer, which
+    /// fills this from the session's user messages.
+    pub fn set_sent_prompts(&mut self, prompts: Vec<String>) {
+        if self.sent_prompts != prompts {
+            self.sent_prompts = prompts;
+        }
+    }
+
+    pub fn sent_prompts(&self) -> &[String] {
+        &self.sent_prompts
+    }
+
+    fn abandon_prompt_recall(&mut self) {
+        self.prompt_recall = None;
+    }
+
+    /// Up at the start of the text recalls the previous sent prompt. While
+    /// that walk is showing and the caret is still where the walk left it,
+    /// Up and Down move through the prompts. Moving the caret, or stepping
+    /// off either end, returns to ordinary vertical motion.
+    fn handle_prompt_recall(&mut self, down: bool, cx: &mut Context<Self>) -> bool {
+        if self.marked_range.is_some() {
+            return false;
+        }
+        if let Some(walk) = self.prompt_recall.clone() {
+            let caret_held = walk.placed == self.cursor_offset() && self.selected_range.is_empty();
+            if !caret_held {
+                self.prompt_recall = None;
+                return false;
+            }
+            if down {
+                if walk.index + 1 < walk.prompts.len() {
+                    let index = walk.index + 1;
+                    let text = walk.prompts[index].clone();
+                    if let Some(walk) = self.prompt_recall.as_mut() {
+                        walk.index = index;
+                    }
+                    self.show_recalled(&text, cx);
+                    return true;
+                }
+                let draft = walk.draft;
+                self.prompt_recall = None;
+                self.show_recalled(&draft, cx);
+                return true;
+            }
+            if walk.index == 0 {
+                self.prompt_recall = None;
+                return false;
+            }
+            let index = walk.index - 1;
+            let text = walk.prompts[index].clone();
+            if let Some(walk) = self.prompt_recall.as_mut() {
+                walk.index = index;
+            }
+            self.show_recalled(&text, cx);
+            return true;
+        }
+
+        if down
+            || self.cursor_offset() != 0
+            || !self.selected_range.is_empty()
+            || self.sent_prompts.is_empty()
+        {
+            return false;
+        }
+        let prompts = self.sent_prompts.clone();
+        let index = prompts.len() - 1;
+        let text = prompts[index].clone();
+        self.prompt_recall = Some(PromptRecall {
+            draft: self.content.to_string(),
+            prompts,
+            index,
+            placed: 0,
+        });
+        self.show_recalled(&text, cx);
+        true
+    }
+
+    fn show_recalled(&mut self, text: &str, cx: &mut Context<Self>) {
+        let text: SharedString = text.to_owned().into();
+        let changed = self.content != text;
+        self.content = text;
+        let offset = self.content.len();
+        self.selected_range = offset..offset;
+        self.selection_reversed = false;
+        self.marked_range = None;
+        self.vertical_navigation = None;
+        if let Some(walk) = self.prompt_recall.as_mut() {
+            walk.placed = offset;
+        }
+        // The replacement is a new baseline. Undoing into the text that was
+        // on screen before the recall would mix two drafts.
+        if changed {
+            self.history = EditHistory::default();
+            self.refresh_highlight();
+            cx.emit(InputEvent::Edited);
+        }
+        self.pause_blink_cursor(cx);
+        cx.notify();
+    }
+
     /// Move or extend by one rendered row, not merely one newline-delimited
     /// line. This is the textarea convention: soft wraps count, and the
     /// original x goal survives a shorter row between two longer ones.
@@ -1177,6 +1340,13 @@ impl TextInput {
                 return;
             }
             cx.propagate();
+            return;
+        }
+
+        if extend {
+            // Selecting is caret motion, so a prompt walk does not continue.
+            self.abandon_prompt_recall();
+        } else if self.handle_prompt_recall(down, cx) {
             return;
         }
 
@@ -1236,14 +1406,18 @@ impl TextInput {
             current_row.saturating_sub(1)
         };
 
-        // Past the first or last row the caret has nowhere to step, but a
-        // selection keeps going to the field's own edge, as native does.
-        if extend && target_row == current_row {
+        // No further visual row. Down moves to the end of the content and Up
+        // to the start, which is where `moveDown:` / `moveUp:` land. A
+        // selection grows to that same edge. Already standing there, the key
+        // propagates so an enclosing surface can use it.
+        if target_row == current_row {
             let edge = if down { self.content.len() } else { 0 };
-            if self.cursor_offset() == edge {
+            if self.cursor_offset() == edge && (extend || self.selected_range.is_empty()) {
                 cx.propagate();
-            } else {
+            } else if extend {
                 self.select_to(edge, cx);
+            } else {
+                self.move_to(edge, cx);
             }
             return;
         }
@@ -1819,6 +1993,7 @@ impl TextInput {
         selection_reversed: bool,
         cx: &mut Context<Self>,
     ) {
+        self.abandon_prompt_recall();
         self.content = content.into();
         self.selected_range = selection;
         self.selection_reversed = selection_reversed;
@@ -1836,6 +2011,7 @@ impl TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.abandon_prompt_recall();
         self.vertical_navigation = None;
         self.is_selecting = true;
         self.selected_word_range = None;
@@ -1905,6 +2081,7 @@ impl TextInput {
     }
 
     fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.abandon_prompt_recall();
         self.selected_range = offset..offset;
         self.selection_reversed = false;
         self.vertical_navigation = None;
@@ -1934,6 +2111,7 @@ impl TextInput {
     }
 
     fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.abandon_prompt_recall();
         self.vertical_navigation = None;
         self.extend_selection_to(offset);
         self.pause_blink_cursor(cx);
@@ -2090,6 +2268,7 @@ impl EntityInputHandler for TextInput {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.abandon_prompt_recall();
         if self.read_only {
             return;
         }
@@ -2131,6 +2310,7 @@ impl EntityInputHandler for TextInput {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.abandon_prompt_recall();
         if self.read_only {
             return;
         }
@@ -2212,6 +2392,27 @@ impl EntityInputHandler for TextInput {
             .unwrap_or_else(|index| index)
             .min(self.content.len());
         Some(self.offset_to_utf16(utf8_index))
+    }
+}
+
+/// One viewport of scroll, or `None` when the field cannot move that way.
+/// `max_offset` is the positive distance the content extends past the
+/// viewport; the offset itself is zero at the top and negative below that.
+fn page_scroll_y(
+    current: Pixels,
+    viewport: Pixels,
+    max_offset: Pixels,
+    down: bool,
+) -> Option<Pixels> {
+    if viewport <= px(0.) || max_offset <= px(0.) {
+        return None;
+    }
+    let delta = if down { -viewport } else { viewport };
+    let next = (current + delta).clamp(-max_offset, px(0.));
+    if (next - current).abs() <= px(0.5) {
+        None
+    } else {
+        Some(next)
     }
 }
 
@@ -2776,6 +2977,8 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::select_right))
             .on_action(cx.listener(Self::select_up))
             .on_action(cx.listener(Self::select_down))
+            .on_action(cx.listener(Self::page_up))
+            .on_action(cx.listener(Self::page_down))
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
@@ -3023,6 +3226,17 @@ impl ComposerInput {
             .update(cx, |input, cx| input.set_content(content, cx));
     }
 
+    /// Prompts Up can recall, oldest first. The session already stores these;
+    /// this only points the field at that list.
+    pub fn set_sent_prompts(&mut self, prompts: Vec<String>, cx: &mut Context<Self>) {
+        self.input
+            .update(cx, |input, _| input.set_sent_prompts(prompts));
+    }
+
+    pub fn sent_prompts(&self, cx: &App) -> Vec<String> {
+        self.input.read(cx).sent_prompts().to_vec()
+    }
+
     pub fn set_placeholder(
         &mut self,
         placeholder: impl Into<SharedString>,
@@ -3110,8 +3324,8 @@ mod tests {
         ComposerEvent, ComposerInput, DeleteToLineEnd, DeleteToLineStart, DeleteToParagraphEnd,
         EditHistory, FieldMode, SearchPaint, TextInput, UNDO_GROUP_INTERVAL, UNDO_HISTORY_CAP,
         cursor_should_be_visible, input_text_runs, media_paste_entries, next_word_boundary,
-        pasted_text_for_mode, previous_word_boundary, single_line_scroll, trimmed_splice,
-        visual_row_count, word_range_at,
+        page_scroll_y, pasted_text_for_mode, previous_word_boundary, single_line_scroll,
+        trimmed_splice, visual_row_count, word_range_at,
     };
 
     struct InputHarness {
@@ -3251,6 +3465,206 @@ mod tests {
                 input.cursor() > first_boundary,
                 "the wrap-boundary affinity must not leave the caret stuck"
             );
+        });
+    }
+
+    #[gpui::test]
+    fn vertical_arrows_move_to_the_ends_of_the_first_and_last_lines(cx: &mut TestAppContext) {
+        let text = "hello\nworld";
+        let (input, cx) = setup_input(cx, text, px(300.));
+
+        cx.update(|_, cx| input.update(cx, |input, cx| input.select_range(2..2, cx)));
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&input, |input, _| assert_eq!(input.cursor(), 0));
+
+        cx.update(|_, cx| input.update(cx, |input, cx| input.select_range(8..8, cx)));
+        cx.simulate_keystrokes("down");
+        cx.read_entity(&input, |input, _| assert_eq!(input.cursor(), text.len()));
+
+        // Already on the edge, another arrow stays put.
+        cx.simulate_keystrokes("down");
+        cx.read_entity(&input, |input, _| assert_eq!(input.cursor(), text.len()));
+    }
+
+    #[gpui::test]
+    fn page_keys_do_not_move_the_caret_of_a_short_field(cx: &mut TestAppContext) {
+        let (input, cx) = setup_input(cx, "hello", px(300.));
+        cx.update(|_, cx| input.update(cx, |input, cx| input.select_range(2..2, cx)));
+        cx.simulate_keystrokes("pageup pagedown");
+        cx.read_entity(&input, |input, _| {
+            assert_eq!(input.content(), "hello");
+            assert_eq!(input.cursor(), 2);
+        });
+    }
+
+    #[test]
+    fn page_scroll_moves_by_a_viewport_and_stops_at_the_edge() {
+        assert_eq!(
+            page_scroll_y(px(0.), px(100.), px(250.), true),
+            Some(px(-100.))
+        );
+        assert_eq!(
+            page_scroll_y(px(-200.), px(100.), px(250.), true),
+            Some(px(-250.))
+        );
+        assert_eq!(page_scroll_y(px(-250.), px(100.), px(250.), true), None);
+        assert_eq!(
+            page_scroll_y(px(-250.), px(100.), px(250.), false),
+            Some(px(-150.))
+        );
+        assert_eq!(page_scroll_y(px(0.), px(0.), px(250.), true), None);
+        assert_eq!(page_scroll_y(px(0.), px(100.), px(0.), true), None);
+    }
+
+    #[gpui::test]
+    fn ctrl_left_on_this_platform_matches_its_text_binding(cx: &mut TestAppContext) {
+        let (input, cx) = setup_input(cx, "hello world", px(300.));
+        cx.update(|_, cx| input.update(cx, |input, cx| input.select_range(11..11, cx)));
+        cx.simulate_keystrokes("ctrl-left");
+        cx.read_entity(&input, |input, _| {
+            // macOS `moveToLeftEndOfLine:` is the row start. Other desktops
+            // move by a word, which stops at `world`.
+            let expected = if cfg!(target_os = "macos") { 0 } else { 6 };
+            assert_eq!(input.cursor(), expected);
+        });
+        cx.simulate_keystrokes("ctrl-right");
+        cx.read_entity(&input, |input, _| {
+            let expected = if cfg!(target_os = "macos") { 11 } else { 11 };
+            assert_eq!(input.cursor(), expected);
+        });
+    }
+
+    #[gpui::test]
+    fn up_at_the_start_recalls_sent_prompts_until_the_caret_moves(cx: &mut TestAppContext) {
+        let (composer, cx) = setup_composer(cx);
+        composer.update(cx, |composer, cx| {
+            composer.set_sent_prompts(vec!["first".into(), "second".into()], cx);
+            composer.set_content("draft", cx);
+        });
+        composer.update(cx, |composer, cx| {
+            composer
+                .input
+                .update(cx, |input, cx| input.select_range(0..0, cx));
+        });
+
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "second");
+            assert_eq!(composer.cursor(cx), "second".len());
+        });
+
+        // The caret is still where the recall left it, so Up walks older.
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "first");
+            assert_eq!(composer.cursor(cx), "first".len());
+        });
+
+        // Oldest prompt: Up is ordinary motion, to the start of that line.
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "first");
+            assert_eq!(composer.cursor(cx), 0);
+        });
+    }
+
+    #[gpui::test]
+    fn down_walks_forward_to_the_original_draft(cx: &mut TestAppContext) {
+        let (composer, cx) = setup_composer(cx);
+        composer.update(cx, |composer, cx| {
+            composer.set_sent_prompts(vec!["first".into(), "second".into()], cx);
+            composer.set_content("draft", cx);
+        });
+        composer.update(cx, |composer, cx| {
+            composer
+                .input
+                .update(cx, |input, cx| input.select_range(0..0, cx));
+        });
+
+        cx.simulate_keystrokes("up up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "first");
+        });
+        cx.simulate_keystrokes("down");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "second");
+            assert_eq!(composer.cursor(cx), "second".len());
+        });
+        cx.simulate_keystrokes("down");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "draft");
+            assert_eq!(composer.cursor(cx), "draft".len());
+        });
+
+        // Back on the draft, Down is ordinary motion and stays at the end.
+        cx.simulate_keystrokes("down");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "draft");
+            assert_eq!(composer.cursor(cx), "draft".len());
+        });
+    }
+
+    #[gpui::test]
+    fn moving_the_caret_leaves_prompt_recall(cx: &mut TestAppContext) {
+        let (composer, cx) = setup_composer(cx);
+        composer.update(cx, |composer, cx| {
+            composer.set_sent_prompts(vec!["first".into(), "one\ntwo".into()], cx);
+        });
+
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "one\ntwo");
+            assert_eq!(composer.cursor(cx), "one\ntwo".len());
+        });
+
+        // Still on the walk: Up recalls, it does not climb to the previous line.
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "first");
+        });
+
+        cx.simulate_keystrokes("down");
+        cx.simulate_keystrokes("left");
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "one\ntwo");
+            assert!(composer.cursor(cx) < "one\ntwo".len());
+        });
+    }
+
+    #[gpui::test]
+    fn up_recalls_only_from_the_start_of_the_first_line(cx: &mut TestAppContext) {
+        let (composer, cx) = setup_composer(cx);
+        composer.update(cx, |composer, cx| {
+            composer.set_sent_prompts(vec!["sent".into()], cx);
+            composer.set_content("ab\ncd", cx);
+        });
+        composer.update(cx, |composer, cx| {
+            composer
+                .input
+                .update(cx, |input, cx| input.select_range(3..3, cx));
+        });
+
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "ab\ncd");
+            assert!(composer.cursor(cx) < 3);
+        });
+
+        composer.update(cx, |composer, cx| {
+            composer
+                .input
+                .update(cx, |input, cx| input.select_range(1..1, cx));
+        });
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "ab\ncd");
+            assert_eq!(composer.cursor(cx), 0);
+        });
+        cx.simulate_keystrokes("up");
+        cx.read_entity(&composer, |composer, cx| {
+            assert_eq!(composer.content(cx), "sent");
+            assert_eq!(composer.cursor(cx), "sent".len());
         });
     }
 
