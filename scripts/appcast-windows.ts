@@ -174,7 +174,10 @@ export async function generateWindowsAppcasts(
   requireDownloadPrefix(downloadUrlPrefix);
   const secret = process.env.SPARKLE_PRIVATE_KEY?.trim();
   if (!secret) {
-    throw new Error("SPARKLE_PRIVATE_KEY is required to sign the Windows feed.");
+    console.warn(
+      "No SPARKLE_PRIVATE_KEY configured. Skipping the signed Windows update feed.",
+    );
+    return [];
   }
   const privateKey = privateKeyFromSparkleSecret(secret);
   const derived = publicKeyBase64(privateKey);

@@ -324,7 +324,30 @@ jobs:
           restore-keys: |
             macos-latest-rust-1.96.0-release-
 
+      - name: Detect Apple signing
+        id: apple
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          LAUNCHER_SIGNING_IDENTITY: ${{ secrets.LAUNCHER_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$LAUNCHER_SIGNING_IDENTITY" ]; then
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+            echo "No Apple Developer certificate configured. The macOS build will be ad-hoc signed."
+          fi
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "notarize=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarize=false" >> "$GITHUB_OUTPUT"
+            echo "No Apple notarization credentials configured. Notarization will be skipped."
+          fi
+
       - name: Import Apple Developer Certificate
+        if: steps.apple.outputs.sign == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -341,6 +364,7 @@ jobs:
           rm certificate.p12
 
       - name: Store notary credentials
+        if: steps.apple.outputs.sign == 'true' && steps.apple.outputs.notarize == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -357,7 +381,12 @@ jobs:
           LAUNCHER_ANALYTICS_ENDPOINT: ${{ secrets.LAUNCHER_ANALYTICS_ENDPOINT }}
           LAUNCHER_ANALYTICS_WEBSITE_ID: ${{ secrets.LAUNCHER_ANALYTICS_WEBSITE_ID }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: bun run release --local
+        run: |
+          args=(--local)
+          if [ "${{ steps.apple.outputs.notarize }}" != "true" ]; then
+            args+=(--skip-notarize)
+          fi
+          bun run release "${args[@]}"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -366,8 +395,13 @@ jobs:
             dist/Launcher-${{ needs.version.outputs.version }}.dmg
             dist/Launcher-${{ needs.version.outputs.version }}.md
             dist/Launcher-${{ needs.version.outputs.version }}.zip
-            dist/appcast.xml
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-appcast
+          path: dist/appcast.xml
+          if-no-files-found: ignore
 
   draft-release:
     name: Draft GitHub release
@@ -412,9 +446,20 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           LAUNCHER_DOWNLOAD_URL_PREFIX: https://github.com/Lakphy/launcher/releases/download/v${{ needs.version.outputs.version }}/
         run: |
-          # Start from the artifacts in this run. Do not merge Waku's appcasts.
+          # Missing SPARKLE_PRIVATE_KEY skips the feeds inside these scripts.
           bun scripts/appcast-linux.ts artifacts "$VERSION"
           bun scripts/appcast-windows.ts artifacts "$VERSION"
+
+      - name: Require built installers
+        run: |
+          missing=0
+          for pattern in '*.dmg' '*.zip' '*.tar.gz' '*.exe' latest-linux.txt latest-windows.txt; do
+            if ! ls artifacts/$pattern >/dev/null 2>&1; then
+              echo "::error::Missing artifacts/$pattern"
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Write release notes
         env:
@@ -442,7 +487,8 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: ${{ needs.version.outputs.tag }}
           body_path: release-notes.md
-          fail_on_unmatched_files: true
+          # Update feeds are omitted when no Sparkle key is configured.
+          fail_on_unmatched_files: false
           files: |
             artifacts/*.tar.gz
             artifacts/*.dmg

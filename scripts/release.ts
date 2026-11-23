@@ -28,16 +28,17 @@ const help = `Build, notarize, and publish a production release of Launcher.
 Usage:
   bun run release [options]
 
-The default run builds a signed, notarized DMG, packages the Sparkle update
-archive, and writes the appcast. Artifacts stay in dist/ for the GitHub
-Release workflow to attach. One-time setup lives in RELEASING.md.
+The default run builds a DMG and update archive under dist/ for the GitHub
+Release workflow to attach. Developer ID signing, notarization, and the
+Sparkle feed run only when their keys are configured; otherwise those steps
+are skipped and the build is ad-hoc signed.
 
 Options:
   --local                       Accepted for CI. Artifacts are always written
                                 locally; nothing is uploaded
   --output <path>               DMG output path (default: dist/Launcher-<version>.dmg)
   --signing-identity <name>     Developer ID Application identity selector
-                                (or LAUNCHER_SIGNING_IDENTITY; required unless --adhoc)
+                                (or LAUNCHER_SIGNING_IDENTITY; omitted means ad-hoc)
   --notary-profile <name>       notarytool keychain profile
                                 (default: NOTARY; or LAUNCHER_NOTARY_PROFILE)
   --build-number <number>       CFBundleVersion override (or LAUNCHER_BUILD_NUMBER;
@@ -51,18 +52,16 @@ Options:
   --help                        Show this help
 
 Environment:
-  LAUNCHER_SIGNING_IDENTITY         Developer ID Application identity selector
-  LAUNCHER_ANALYTICS_ENDPOINT       analytics endpoint embedded at build time
-  LAUNCHER_ANALYTICS_WEBSITE_ID     analytics website ID embedded at build time
+  LAUNCHER_SIGNING_IDENTITY         Developer ID identity; unset skips to ad-hoc
+  LAUNCHER_ANALYTICS_ENDPOINT       optional analytics endpoint embedded at build
+  LAUNCHER_ANALYTICS_WEBSITE_ID     optional analytics website ID embedded at build
   LAUNCHER_DOWNLOAD_URL_PREFIX      base URL for archive links
                                 (default: ${defaultDownloadUrlPrefix})
   SPARKLE_BIN                   Sparkle tools dir (default: the bundle.sh cache
                                 under .launcher-cache/sparkle)
-  SPARKLE_PRIVATE_KEY           Sparkle EdDSA private key (otherwise keychain)
+  SPARKLE_PRIVATE_KEY           EdDSA private key; unset skips the update feed
 
-Before the first production release:
-  xcrun notarytool store-credentials NOTARY   # notarization credentials
-  See RELEASING.md for the Sparkle key setup.
+See RELEASING.md for Apple notarization and the Sparkle key.
 `;
 
 const { values } = parseArgs({
@@ -127,10 +126,13 @@ function derivedBuildNumber(version: string): string {
   return String(major * 1_000_000 + minor * 1_000 + patch);
 }
 
-const adhoc = values.adhoc ?? false;
 const skipNotarize = values["skip-notarize"] ?? false;
-const configuredSigningIdentity =
-  values["signing-identity"] ?? process.env.LAUNCHER_SIGNING_IDENTITY;
+const configuredSigningIdentity = (
+  values["signing-identity"] ??
+  process.env.LAUNCHER_SIGNING_IDENTITY ??
+  ""
+).trim();
+let adhoc = values.adhoc ?? false;
 const notaryProfile =
   values["notary-profile"] ??
   process.env.LAUNCHER_NOTARY_PROFILE ??
@@ -140,9 +142,6 @@ const explicitBuildNumber =
 const analyticsEndpoint = process.env.LAUNCHER_ANALYTICS_ENDPOINT?.trim();
 const analyticsWebsiteId = process.env.LAUNCHER_ANALYTICS_WEBSITE_ID?.trim();
 const localOnly = values.local ?? false;
-// A full release is a signed, notarized DMG. Flags that weaken signing stay local.
-const fullRelease = !localOnly && !adhoc && !skipNotarize;
-
 const downloadUrlPrefix =
   process.env.LAUNCHER_DOWNLOAD_URL_PREFIX ?? defaultDownloadUrlPrefix;
 
@@ -150,18 +149,21 @@ if (adhoc && values["signing-identity"]) {
   throw new Error("Use either --adhoc or --signing-identity, not both.");
 }
 if (!adhoc && !configuredSigningIdentity) {
-  throw new Error(
-    "Set LAUNCHER_SIGNING_IDENTITY or pass --signing-identity (or use --adhoc).",
+  console.warn(
+    "No Developer ID signing identity configured. Ad-hoc signing this build and skipping notarization.",
   );
+  adhoc = true;
 }
+// A full release is a Developer ID-signed, notarized DMG.
+const fullRelease = !localOnly && !adhoc && !skipNotarize;
 if (explicitBuildNumber && !/^\d+(?:\.\d+){0,2}$/.test(explicitBuildNumber)) {
   throw new Error(
     "--build-number must contain one to three period-separated integers.",
   );
 }
-if (!values["skip-build"] && (!analyticsEndpoint || !analyticsWebsiteId)) {
-  throw new Error(
-    "Set LAUNCHER_ANALYTICS_ENDPOINT and LAUNCHER_ANALYTICS_WEBSITE_ID before building a release.",
+if (!analyticsEndpoint || !analyticsWebsiteId) {
+  console.warn(
+    "Analytics endpoint is not configured. This build will not send usage data.",
   );
 }
 
@@ -554,9 +556,15 @@ try {
       : `No "${version}" section in CHANGELOG.md — attached fallback notes.`,
   );
 
-  logStep("Generating the signed appcast");
-  await generateAppcast(updatesDirectory, downloadUrlPrefix);
-  await $`ditto ${join(updatesDirectory, "appcast.xml")} ${join(projectRoot, "dist", "appcast.xml")}`;
+  if (!process.env.SPARKLE_PRIVATE_KEY?.trim()) {
+    console.warn(
+      "No SPARKLE_PRIVATE_KEY configured. Skipping the signed update feed.",
+    );
+  } else {
+    logStep("Generating the signed appcast");
+    await generateAppcast(updatesDirectory, downloadUrlPrefix);
+    await $`ditto ${join(updatesDirectory, "appcast.xml")} ${join(projectRoot, "dist", "appcast.xml")}`;
+  }
 
   console.log(`\nDMG ready: ${outputPath}`);
   console.log(`ZIP ready: ${zipPath}`);

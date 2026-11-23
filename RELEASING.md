@@ -211,21 +211,21 @@ public on GitHub Releases.
 [`scripts/install-linux.sh`](scripts/install-linux.sh) reads from the latest
 GitHub Release to choose a version. See [docs/linux.md](docs/linux.md).
 
-Configure these repository secrets first:
+Repository secrets are optional. A missing secret skips that signature and the release still publishes installers.
 
-| Secret | Purpose |
+| Secret | When it is set |
 | --- | --- |
-| `LAUNCHER_ANALYTICS_ENDPOINT` | embedded in every desktop CI build |
-| `LAUNCHER_ANALYTICS_WEBSITE_ID` | embedded in every desktop CI build |
-| `LAUNCHER_SIGNING_IDENTITY` | Developer ID identity selector |
+| `LAUNCHER_SIGNING_IDENTITY` | Developer ID identity. With `APPLE_CERTIFICATE`, the macOS app is Developer ID signed. Unset means ad-hoc. |
 | `APPLE_CERTIFICATE` | base64-encoded Developer ID Application `.p12` |
 | `APPLE_CERTIFICATE_PASSWORD` | password for that `.p12` |
-| `APPLE_ID` | Apple ID used by `notarytool` |
+| `APPLE_ID` | Apple ID used by `notarytool`. All three notarization secrets must be set, or notarization is skipped. |
 | `APPLE_APP_SPECIFIC_PASSWORD` | app-specific password for that Apple ID |
 | `APPLE_TEAM_ID` | Developer Team ID |
-| `SPARKLE_PRIVATE_KEY` | EdDSA private key for `generate_appcast` |
-| `WINDOWS_CERTIFICATE` | optional; base64-encoded Authenticode `.pfx` |
-| `WINDOWS_CERTIFICATE_PASSWORD` | optional; password for that `.pfx` |
+| `SPARKLE_PRIVATE_KEY` | EdDSA private key. Unset skips the signed update feeds. |
+| `LAUNCHER_ANALYTICS_ENDPOINT` | embedded only when both analytics values are set |
+| `LAUNCHER_ANALYTICS_WEBSITE_ID` | embedded only when both analytics values are set |
+| `WINDOWS_CERTIFICATE` | optional Authenticode `.pfx`, base64. Unset ships an unsigned Windows installer. |
+| `WINDOWS_CERTIFICATE_PASSWORD` | password for that `.pfx` |
 ### Options
 
 | Flag / Env | Default | Purpose |
