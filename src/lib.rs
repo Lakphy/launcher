@@ -118,6 +118,11 @@ const MIN_WINDOW_HEIGHT: f32 = 680.0;
 /// back by hand.
 const TITLEBAR_GRAB_WIDTH: f32 = 160.0;
 const TITLEBAR_GRAB_HEIGHT: f32 = 22.0;
+/// Equal inset of the macOS traffic lights from the window's left and top
+/// edges. GPUI uses `x` as the close button's left origin and `y` as the
+/// padding above the buttons, inside a titlebar container pinned to the
+/// top of the window, so the same value is the top inset.
+const TRAFFIC_LIGHT_INSET: f32 = 16.0;
 
 /// Reopen the main window where the user last left it, on the display it was
 /// left on. GPUI window bounds are display-relative, so the persisted frame is
@@ -339,7 +344,7 @@ pub fn run() {
                                 target_os = "windows"
                             )),
                             traffic_light_position: cfg!(target_os = "macos")
-                                .then(|| point(px(16.0), px(17.0))),
+                                .then(|| point(px(TRAFFIC_LIGHT_INSET), px(TRAFFIC_LIGHT_INSET))),
                         }),
                         // Launcher moves its custom macOS titlebar explicitly. Keep
                         // the NSWindow movable so native controls and Window-menu

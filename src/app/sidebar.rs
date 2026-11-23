@@ -337,7 +337,11 @@ pub(super) fn format_time_ago(seconds: u64) -> String {
 pub(super) enum SidebarRow {
     /// Opens the window-wide command palette and scrolls with history.
     Search,
-    /// Group header; the first row also carries the sidebar actions.
+    /// Label above project groups. Not a control: it only names the history
+    /// and hosts the sidebar actions on its right.
+    HistoryLabel,
+    /// Group header. Updated grouping puts the sidebar actions on the first
+    /// header; project grouping puts them on the history label.
     Header(SidebarGroup),
     /// A started session.
     Session(Uuid),
@@ -355,7 +359,9 @@ fn sidebar_session_row_index(rows: &[SidebarRow], session_id: Uuid) -> Option<us
 fn sidebar_row_height(row: SidebarRow) -> Pixels {
     px(match row {
         SidebarRow::Search => SIDEBAR_ACTION_ROW_HEIGHT + SIDEBAR_SEARCH_BOTTOM_GAP,
-        SidebarRow::Header(_) => SIDEBAR_GROUP_HEADER_HEIGHT + SIDEBAR_GROUP_HEADER_BOTTOM_GAP,
+        SidebarRow::HistoryLabel | SidebarRow::Header(_) => {
+            SIDEBAR_GROUP_HEADER_HEIGHT + SIDEBAR_GROUP_HEADER_BOTTOM_GAP
+        }
         SidebarRow::Session(_) => SIDEBAR_SESSION_ROW_HEIGHT,
         SidebarRow::ShowMore(_) => SIDEBAR_SHOW_MORE_ROW_HEIGHT,
         SidebarRow::GroupSpacer => SIDEBAR_GROUP_SPACER_HEIGHT,
@@ -701,6 +707,30 @@ impl Launcher {
             .gap(px(2.0))
             .child(options)
             .child(add_project)
+    }
+
+    /// Section label for project-grouped history. The row itself is not a
+    /// control: no focus, click, key activation, or hover treatment. The
+    /// option and new-project buttons on the right keep their own keyboard
+    /// and pointer behavior.
+    fn render_sidebar_history_label(&self, cx: &mut Context<Self>) -> Div {
+        let theme = Theme::current(cx);
+        div()
+            .w_full()
+            .pb(px(SIDEBAR_GROUP_HEADER_BOTTOM_GAP))
+            .child(
+                session_group_header(&theme)
+                    .w_full()
+                    .gap(px(8.0))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_1()
+                            .truncate()
+                            .child(tr_cow!("sidebar.task_history")),
+                    )
+                    .child(self.render_sidebar_header_actions(cx)),
+            )
     }
 
     fn render_sidebar_action_row(
@@ -1262,6 +1292,7 @@ impl Launcher {
                 }
             }
             SidebarGrouping::Project => {
+                rows.push(SidebarRow::HistoryLabel);
                 let recent_cutoff = now.saturating_sub(SIDEBAR_PROJECT_RECENT_WINDOW_SECONDS);
                 let session_timestamps = sorted_sessions
                     .iter()
@@ -1302,32 +1333,13 @@ impl Launcher {
             }
         }
         if rows.len() == 1 {
-            // Keep the header actions visible while there is no history.
-            let group = match self.state.sidebar_grouping {
-                SidebarGrouping::Updated => SidebarGroup::Updated(SessionDateGroup::Today),
-                SidebarGrouping::Project => {
-                    let projectless_root = crate::projectless::workspace_root();
-                    self.state
-                        .selected_project
-                        .and_then(|project_id| {
-                            self.state
-                                .projects
-                                .iter()
-                                .find(|project| project.id == project_id)
-                        })
-                        .or_else(|| self.state.projects.first())
-                        .map(|project| {
-                            if sidebar_project_is_projectless(project, projectless_root.as_deref())
-                            {
-                                SidebarGroup::Projectless
-                            } else {
-                                SidebarGroup::Project(project.id)
-                            }
-                        })
-                        .unwrap_or(SidebarGroup::Projectless)
-                }
-            };
-            rows.push(SidebarRow::Header(group));
+            // Updated grouping with no sessions still needs a header so the
+            // sidebar actions stay on screen. Project grouping already
+            // inserted the history label, which carries those actions.
+            debug_assert_eq!(self.state.sidebar_grouping, SidebarGrouping::Updated);
+            rows.push(SidebarRow::Header(SidebarGroup::Updated(
+                SessionDateGroup::Today,
+            )));
         }
         rows
     }
@@ -1368,12 +1380,22 @@ impl Launcher {
         };
         match *row {
             SidebarRow::Search => self.render_sidebar_search(cx).into_any_element(),
+            SidebarRow::HistoryLabel => self.render_sidebar_history_label(cx).into_any_element(),
             SidebarRow::Header(group) => {
                 let has_expanded_children = rows.get(index + 1).is_some_and(|row| {
                     matches!(row, SidebarRow::Session(_) | SidebarRow::ShowMore(_))
                 });
-                self.render_sidebar_group_header(group, index == 1, has_expanded_children, cx)
-                    .into_any_element()
+                // Search is always row 0, so the first date header is row 1.
+                // Project grouping hosts the same actions on the history label.
+                let show_header_actions =
+                    self.state.sidebar_grouping == SidebarGrouping::Updated && index == 1;
+                self.render_sidebar_group_header(
+                    group,
+                    show_header_actions,
+                    has_expanded_children,
+                    cx,
+                )
+                .into_any_element()
             }
             SidebarRow::Session(session_id) => self
                 .render_sidebar_session_item(session_id, cx)
@@ -1391,7 +1413,7 @@ impl Launcher {
     fn render_sidebar_group_header(
         &self,
         group: SidebarGroup,
-        first: bool,
+        show_header_actions: bool,
         has_expanded_children: bool,
         cx: &mut Context<Self>,
     ) -> Div {
@@ -1527,7 +1549,7 @@ impl Launcher {
                     .child(div().flex_1()),
             )
             .when_some(compose, |element, compose| element.child(compose))
-            .when(first, |element| {
+            .when(show_header_actions, |element| {
                 element.child(self.render_sidebar_header_actions(cx))
             })
             .when(show_folder_icon && has_expanded_children, |element| {

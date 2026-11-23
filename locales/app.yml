@@ -522,6 +522,8 @@ sidebar.open:
   en: Open sidebar
 sidebar.tasks:
   en: Tasks
+sidebar.task_history:
+  en: Task history
 sidebar.add_project:
   en: Add remote project
 sidebar.resize:
