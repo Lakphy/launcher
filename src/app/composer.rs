@@ -36,6 +36,32 @@ pub(super) enum ComposerSubmitAction {
     Stop,
 }
 
+/// User-visible text the composer can recall, oldest first: transcript
+/// user messages, then follow-ups still waiting in the queue. Blank
+/// submissions are not stored, so they are not recalled.
+pub(super) fn sent_composer_prompts(session: Option<&AgentSession>) -> Vec<String> {
+    let Some(session) = session else {
+        return Vec::new();
+    };
+    let mut prompts = Vec::new();
+    for message in &session.messages {
+        if message.role != MessageRole::User {
+            continue;
+        }
+        push_sent_prompt(&mut prompts, message.visible_content());
+    }
+    for queued in &session.queued_messages {
+        push_sent_prompt(&mut prompts, queued.visible_content());
+    }
+    prompts
+}
+
+fn push_sent_prompt(prompts: &mut Vec<String>, text: &str) {
+    if !text.trim().is_empty() {
+        prompts.push(text.to_owned());
+    }
+}
+
 pub(super) fn composer_submit_action(
     status: Option<SessionStatus>,
     preparing: bool,
@@ -2705,6 +2731,13 @@ impl Launcher {
     pub(super) fn render_composer(&self, window: &Window, cx: &mut Context<Self>) -> Div {
         let theme = Theme::current(cx);
         let session = self.selected_session();
+        let sent_prompts = sent_composer_prompts(session);
+        if self.composer.read(cx).sent_prompts(cx) != sent_prompts {
+            let composer = self.composer.clone();
+            cx.defer(move |cx| {
+                composer.update(cx, |input, cx| input.set_sent_prompts(sent_prompts, cx));
+            });
+        }
         let preparing = session.is_some_and(|session| {
             self.submission_preparations.contains(&session.id)
                 || self.response_fork_preparations.contains_key(&session.id)
@@ -3937,4 +3970,40 @@ pub(super) fn visible_picker_models(
         });
     }
     models
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{AgentSession, Message, MessageRole, ProviderKind, QueuedMessage};
+    use super::sent_composer_prompts;
+    use uuid::Uuid;
+
+    #[test]
+    fn sent_prompts_follow_user_messages_then_the_queue() {
+        let mut session = AgentSession::new(Uuid::new_v4(), ProviderKind::Codex);
+        session
+            .messages
+            .push(Message::new(MessageRole::Assistant, "reply"));
+        session
+            .messages
+            .push(Message::new(MessageRole::User, "first"));
+        session
+            .messages
+            .push(Message::new(MessageRole::User, "   "));
+        session.messages.push(
+            Message::new(MessageRole::User, "transport @file")
+                .with_presentation(Some("visible".into()), Vec::new()),
+        );
+        session.queued_messages.push(QueuedMessage::new("queued"));
+
+        assert_eq!(
+            sent_composer_prompts(Some(&session)),
+            vec![
+                "first".to_string(),
+                "visible".to_string(),
+                "queued".to_string()
+            ]
+        );
+        assert!(sent_composer_prompts(None).is_empty());
+    }
 }
