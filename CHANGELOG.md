@@ -16,7 +16,9 @@ the original feature bullet instead of adding separate entries for them.
 
 ## [unreleased]
 
-- Distribute this application as Launcher, a modified version of Waku. Projects and settings live in Launcher's own directories, separate from a Waku install.
+## [0.0.1]
+
+- First Launcher release. This is a modified version of Waku. Projects and settings live in Launcher's own directories, separate from a Waku install.
 
 ## [0.1.20]
 
